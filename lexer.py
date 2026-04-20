@@ -1,4 +1,5 @@
 import ply.lex as lex
+import sys
 
 reserved = {
     "PROGRAM": "PROGRAM",
@@ -13,26 +14,47 @@ reserved = {
     "DO": "DO",
     "GOTO": "GOTO",
     "PRINT": "PRINT",
-    "READ": "READ"
+    "READ": "READ",
+    "INTEGER": "INTEGER",
+    "REAL": "REAL",
+    "LOGICAL": "LOGICAL",
+    "MOD": "MOD",
+    "STOP": "STOP",
+    "WRITE": "WRITE",
+    "DOUBLE": "DOUBLE",
+    "PRECISION": "PRECISION",
+    "CHARACTER": "CHARACTER",
+    "PARAMETER": "PARAMETER",
 }
 
-tokens = ["INTEGER", "REAL", "LOGICAL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", 
-          "OPADDSUB", "OPMULDIV", "AND", "OR", "NOT", "TRUE", "FALSE", 
-          "STRING"]+ list(reserved.values())
+tokens = ["INT", "COMMENT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", 
+          "OPADDSUB", "OPDIV", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT"]+ list(reserved.values())
 
-def t_REAL(t):
-    r"\d+\.\d+"
-    t.value = float(t.value)
+def t_COMMENT(t):
+    r"\nC\s"
+    t.value = "C"
     return t
 
-def t_INTEGER(t): 
+# def t_COMMENT(t):
+#     r"[Cc\*].*"
+#     pass
+
+def t_NREAL(t):
+    r"\d+\.\d*"
+    t.value = float(t.value) 
+    return t
+
+def t_INT(t):
     r"\d+"
     t.value = int(t.value) 
     return t
 
-def t_LOGICAL(t):
-    r"(.TRUE.|.FALSE.)"
-    t.value = bool(t.value)
+def t_BOOL(t):
+    r"\.TRUE\.|\.FALSE\."
+    if t.value.upper() == ".TRUE.":
+        t.value = True
+    else:
+        t.value = False
     return t
 
 def t_newline(t):
@@ -40,7 +62,7 @@ def t_newline(t):
     t.lexer.lineno += 1 
 
 def t_VAR(t):
-    r"[a-zA-Z0-9]+"
+    r"[A-Za-z][A-Za-z0-9_]*"
     t.type = reserved.get(t.value, "VAR") 
     return t
 
@@ -51,8 +73,11 @@ def t_STRING(t):
 
 literals = "(),*'"
 
+t_CONCAT = r"//" # operador de concatenação
+t_POWER = r"\*\*" # operador de potência
 t_OPADDSUB = r"[+\-]" # operadores de adição e subtração
-t_OPMULDIV = r"[/\*]" # operadores de multiplicação e divisão
+t_OPDIV = r"/" # operadores de multiplicação e divisão
+t_EQUALS = r"=" # operador de atribuição
 t_EQ = r'\.EQ\.'
 t_NE = r'\.NE\.'
 t_LT = r'\.LT\.'
@@ -62,8 +87,6 @@ t_GE = r'\.GE\.'
 t_AND = r'\.AND\.'
 t_OR = r'\.OR\.'
 t_NOT = r'\.NOT\.'
-t_TRUE = r'\.TRUE\.'
-t_FALSE = r'\.FALSE\.'
 t_ignore = " \t"
 
 def t_error(t): 
@@ -72,11 +95,12 @@ def t_error(t):
 
 lexer = lex.lex()
 
-ex1 = """
-    PROGRAM HELLO
-    PRINT *, 'Ola, Mundo!'
-    END
-"""
-lexer.input(ex1)
-for tok in lexer:
-    print(tok)
+def main(args):
+    with open(args[1], "r") as f:
+        data = f.read()
+    lexer.input(data)
+    for tok in lexer:
+        print(tok)
+
+if __name__ == "__main__":
+    main(sys.argv)
