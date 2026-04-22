@@ -21,10 +21,10 @@ reserved = {
     "MOD": "MOD",
     "STOP": "STOP",
     "WRITE": "WRITE",
-    "DOUBLE": "DOUBLE",
-    "PRECISION": "PRECISION",
+    "DOUBLE": "DOUBLE PRECISION",
     "CHARACTER": "CHARACTER",
-    "PARAMETER": "PARAMETER",
+    "PARAMETER": "PARAMETER", # PARAMETER define uma constante, enquanto x = 10 define uma variável.
+    "LABEL": "LABEL"
 }
 
 tokens = ["INT", "COMMENT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", 
@@ -104,3 +104,9 @@ def main(args):
 
 if __name__ == "__main__":
     main(sys.argv)
+
+# comentários - ju
+# labels - sofia
+
+# formatação in-line (ex: '(A, I5)') - su
+# geral - su
