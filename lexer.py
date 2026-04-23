@@ -26,7 +26,7 @@ reserved = {
     "LABEL": "LABEL"
 }
 
-tokens = ["INT", "COMMENT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DOUBLE",
+tokens = ["INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DOUBLE",
           "OPADDSUB", "OPDIV", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT"]+ list(reserved.values())
 
 
