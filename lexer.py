@@ -21,23 +21,26 @@ reserved = {
     "MOD": "MOD",
     "STOP": "STOP",
     "WRITE": "WRITE",
-    "DOUBLE": "DOUBLE PRECISION",
     "CHARACTER": "CHARACTER",
     "PARAMETER": "PARAMETER", # PARAMETER define uma constante, enquanto x = 10 define uma variável.
     "LABEL": "LABEL"
 }
 
-tokens = ["INT", "COMMENT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", 
+tokens = ["INT", "COMMENT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DOUBLE",
           "OPADDSUB", "OPDIV", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT"]+ list(reserved.values())
 
-def t_COMMENT(t):
-    r"\nC\s"
-    t.value = "C"
-    return t
 
-# def t_COMMENT(t):
-#     r"[Cc\*].*"
-#     pass
+def t_COMMENT(t):
+    # capturar o comentário inteiro (o resto da linha)
+    r"\nC.*" 
+    # t.value = t.value[7:] # ignorar \n + o conteúdo nas colunas reservadas
+    # return t
+    pass # ignorar os comentários, não precisamos deles para a análise sintática
+
+def t_DOUBLE(t):
+    r"DOUBLE\s+PRECISION"
+    t.value = "DOUBLE PRECISION"
+    return t
 
 def t_NREAL(t):
     r"\d+\.\d*"
@@ -93,14 +96,18 @@ def t_error(t):
     print("Invalid symbol:", t.value[0])
     t.lexer.skip(1)
 
+
 lexer = lex.lex()
 
 def main(args):
     with open(args[1], "r") as f:
         data = f.read()
-    lexer.input(data)
-    for tok in lexer:
-        print(tok)
+    try: 
+        lexer.input(data)
+        for tok in lexer:
+            print(tok)
+    except Exception as e:
+        print(f"Erro de análise léxica: {e}")
 
 if __name__ == "__main__":
     main(sys.argv)
