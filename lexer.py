@@ -92,12 +92,17 @@ t_OR = r'\.OR\.'
 t_NOT = r'\.NOT\.'
 t_ignore = " \t"
 
+
+class LexError(Exception):
+    pass
+    
 def t_error(t): 
-    print("Invalid symbol:", t.value[0])
-    t.lexer.skip(1)
+    raise LexError(f"Illegal character '{t.value[0]}' at line {t.lexer.lineno}")
 
 
 lexer = lex.lex()
+
+
 
 def main(args):
     with open(args[1], "r") as f:

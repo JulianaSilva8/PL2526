@@ -10,8 +10,16 @@ def p_empty(p):
 def p_declaration(p):
     r"""
     Declaration : Type VarList
+    """
+
+def p_var_list(p):
+    r"""
     VarList : VAR
             | VarList "," VAR
+    """
+
+def p_type(p):
+    r"""
     Type : INTEGER
          | REAL
          | LOGICAL
@@ -93,6 +101,7 @@ def p_expression_element(p):
                       | NREAL
                       | BOOL
                       | STRING
+                      | "(" Expression ")"
     """
 
 
@@ -102,22 +111,30 @@ def p_if_statement(p):
                 | IF Expression THEN StatementList ELSE StatementList ENDIF
     """
 
-def p_for_statement(p):
+def p_for_statement(p): # não é suppsto incluir os statements dentro do for -> isso é tratado na análise semântica
     r"""
-    ForStatement : DO LABEL VAR EQUALS Expression "," Expression StatementList
+    ForStatement : DO LABEL VAR EQUALS Expression "," Expression
     """
 
 def p_function_call(p):
     r"""
     FunctionCall : VAR "(" ArgList ")"
+                 | VAR "(" ")"
+    """
+
+def p_arg_list(p):
+    r"""
     ArgList : Expression
             | ArgList "," Expression
-            | empty
     """
 
 def p_function_declaration(p):
     r"""
     FunctionDeclaration : Type FUNCTION VAR "(" ParamList ")" StatementList RETURN END
+    """
+
+def p_param_list(p):
+    r"""
     ParamList : Type VAR
               | ParamList "," Type VAR
               | empty
@@ -133,25 +150,37 @@ def p_goto_statement(p):
     GotoStatement : GOTO LABEL
     """
 
-def p_stop_statement(p): # WRONG - FIX!!!
+def p_stop_statement(p): # args opcionais: String of no more that 5 digits or a character constant 
     r"""
-    StopStatement : STOP ArgList
+    StopStatement : STOP STRING
+                  | STOP INT
+                  | STOP
     """
 
-def p_print_statement(p):
+def p_print_statement(p): # print sem args -> linha vazia 
     r"""
-    PrintStatement : PRINT Format ArgList
+    PrintStatement : PRINT Format "," ArgList
+                   | PRINT Format
     """
 
 def p_read_statement(p):
     r"""
-    ReadStatement : READ Format VarList
+    ReadStatement : READ Format "," VarList
     """
 
-def p_write_statement(p): # WRONG - FIX!!!
-    r"""
-    WriteStatement : WRITE Format ArgList
-    """
+# def p_write_statement(p): # SEE
+#     r"""
+#     WriteStatement : WRITE "(" ControlPair ")" ArgList
+#                     | WRITE "(" ControlPair ")"
+#     """
+
+# def p_control_pair(p):
+#     r"""
+#     ControlPair : Expression "," Expression
+#                 | "*" "," Expression
+#                 | Expression "," "*"
+#                 | "*" "," "*"
+#     """
 
 def p_format(p):
     r"""
@@ -192,8 +221,10 @@ def p_statement(p):
               | ReadStatement
               | Continue
               | StopStatement
-              | WriteStatement
     """
+
+    #           | WriteStatement  -> SEE LATER
+    # """
 
 def p_program_unit(p):
     r"""
@@ -211,7 +242,7 @@ class ParseError(Exception):
     pass
 
 def p_error(t):
-    raise ParseError(f"Unexpected token: {t.type if t else '$'}")
+    raise ParseError(f"Parse Error: Unexpected token: {t.type if t else '$'}")
 
 # Build parser
 parser = yacc.yacc(start="ProgramUnitList", write_tables=False)
@@ -227,7 +258,7 @@ def main(args):
         for tok in lexer:
             print(tok)
     except Exception as e:
-        print(f"Erro de análise léxica: {e}")
+        print(e)
 
 if __name__ == "__main__":
     main(sys.argv)
