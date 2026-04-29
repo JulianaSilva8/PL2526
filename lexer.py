@@ -32,7 +32,7 @@ tokens = ["INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DO
 
 def t_COMMENT(t):
     # capturar o comentário inteiro (o resto da linha)
-    r"\nC.*" 
+    r'(^|\n)[cC*].*'
     # t.value = t.value[7:] # ignorar \n + o conteúdo nas colunas reservadas
     # return t
     pass # ignorar os comentários, não precisamos deles para a análise sintática
@@ -65,7 +65,7 @@ def t_newline(t):
     t.lexer.lineno += 1 
 
 def t_VAR(t):
-    r"[A-Za-z][A-Za-z0-9_]*"
+    r"[A-Za-z_][A-Za-z0-9_]*"
     t.type = reserved.get(t.value, "VAR") 
     return t
 
