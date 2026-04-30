@@ -2,21 +2,46 @@ import sys
 
 from ply import lex, yacc
 from lexer import lexer, tokens
-
-def p_empty(p):
-    'empty :'
-    pass
+from symbol_table import SymbolTable
 
 def p_declaration(p):
     r"""
     Declaration : Type VarList
     """
+    type_name = p[1]
+    for var in p[2]:
+        if isinstance(var, tuple):  # array decl
+            var_name, size = var
+            parser.symbol_table.add_variable(var_name, type_name, is_array=True, size=size)
+        else:  # regular variable declaration
+            parser.symbol_table.add_variable(var, type_name)
+
+
+def p_var_decl(p):
+    r"""
+    VarDecl : VAR
+    """
+    p[0] = p[1]
+
+def p_var_decl_array(p):
+    r"""
+    VarDecl : VAR "(" INT ")"
+    """
+    p[0] = (p[1], p[2])
+
+def p_var_list_single(p):
+    r"""
+    VarList : VarDecl
+    """
+    p[0] = [p[1]]
+
 
 def p_var_list(p):
     r"""
-    VarList : VAR
-            | VarList "," VAR
+    VarList : VarList "," VarDecl
     """
+    p[0] = p[1] + [p[3]]
+    
 
 def p_type(p):
     r"""
@@ -25,9 +50,23 @@ def p_type(p):
          | LOGICAL
          | DOUBLE
          | CHARACTER
-         | PARAMETER
     """
-    # parameter não deveria estar aqui
+
+def p_parameter_statement(p):
+    r"""
+    ParameterStatement : PARAMETER "(" ParamAssignList ")"
+    """
+
+def p_param_assign_list(p):
+    r"""
+    ParamAssignList : ParamAssign
+                    | ParamAssignList "," ParamAssign
+    """
+
+def p_param_assign(p):
+    r"""
+    ParamAssign : VAR EQUALS Expression
+    """
 
 # ver: parenteses nas expressões e NOT
 
@@ -40,19 +79,25 @@ def p_type(p):
 # 6. Concatenation: CONCAT
 
 
-def p_expression(p):
+def p_logical_expression(p):
     r"""
-    Expression : NonLogicalExpression
-                | NonLogicalExpression LogicalOp NonLogicalExpression
+    Expression : LogicalTerm
+               | Expression OR LogicalTerm
     """
 
-def p_logical_op(p):
+def p_logical_term(p):
     r"""
-    LogicalOp : AND
-              | OR
-              | NOT
+    LogicalTerm : LogicalFactor
+                | LogicalTerm AND LogicalFactor
     """
 
+def p_logical_factor(p):
+    r"""
+    LogicalFactor : NOT LogicalFactor
+                  | NonLogicalExpression
+    """
+
+# JU !!!!!!!1
 def p_nonlogical_expression(p):
     r"""
     NonLogicalExpression : AdditiveExpression
@@ -79,7 +124,8 @@ def p_multiplicative_expression(p):
     r"""
     Term : PowerExpression
          | Term OPDIV PowerExpression
-         | Term MOD PowerExpression
+         | Term '*' PowerExpression
+         | MOD "(" Term "," PowerExpression ")"
     """
 
 def p_power_expression(p):
@@ -97,6 +143,7 @@ def p_concatenation_expression(p):
 def p_expression_element(p):
     r"""
     ExpressionElement : VAR
+                      | IndexOrCall
                       | INT
                       | NREAL
                       | BOOL
@@ -109,17 +156,12 @@ def p_if_statement(p):
     r"""
     IfStatement : IF Expression THEN StatementList ENDIF
                 | IF Expression THEN StatementList ELSE StatementList ENDIF
+                | IF Expression StatementContent
     """
 
 def p_for_statement(p): # não é suppsto incluir os statements dentro do for -> isso é tratado na análise semântica
     r"""
-    ForStatement : DO LABEL VAR EQUALS Expression "," Expression
-    """
-
-def p_function_call(p):
-    r"""
-    FunctionCall : VAR "(" ArgList ")"
-                 | VAR "(" ")"
+    ForStatement : DO INT VAR EQUALS Expression "," Expression
     """
 
 def p_arg_list(p):
@@ -130,24 +172,24 @@ def p_arg_list(p):
 
 def p_function_declaration(p):
     r"""
-    FunctionDeclaration : Type FUNCTION VAR "(" ParamList ")" StatementList RETURN END
+    FunctionDeclaration : Type FUNCTION IndexOrCall StatementList RETURN END
     """
 
-def p_param_list(p):
+
+def p_index_or_call(p):
     r"""
-    ParamList : Type VAR
-              | ParamList "," Type VAR
-              | empty
+    IndexOrCall : VAR "(" ArgList ")"
+                | VAR "(" ")"
     """
 
-def p_statement_continue(p):
+def p_continue(p):
     r"""
-    Continue : LABEL CONTINUE
+    Continue : CONTINUE
     """
 
 def p_goto_statement(p):
     r"""
-    GotoStatement : GOTO LABEL
+    GotoStatement : GOTO INT
     """
 
 def p_stop_statement(p): # args opcionais: String of no more that 5 digits or a character constant 
@@ -157,15 +199,28 @@ def p_stop_statement(p): # args opcionais: String of no more that 5 digits or a 
                   | STOP
     """
 
+# SOFIA !! 
 def p_print_statement(p): # print sem args -> linha vazia 
     r"""
     PrintStatement : PRINT Format "," ArgList
                    | PRINT Format
     """
 
+def p_read_arg(p):
+    r"""
+    ReadArg : VAR
+            | IndexOrCall
+    """
+
+def p_read_arg_list(p):
+    r"""
+    ReadArgList : ReadArg
+                | ReadArgList "," ReadArg
+    """
+
 def p_read_statement(p):
     r"""
-    ReadStatement : READ Format "," VarList
+    ReadStatement : READ Format "," ReadArgList
     """
 
 # def p_write_statement(p): # SEE
@@ -211,25 +266,35 @@ def p_statement_list(p):
 
 def p_statement(p):
     r"""
-    Statement : Declaration
-              | Assignment
-              | IfStatement
-              | ForStatement
-              | FunctionCall
-              | GotoStatement
-              | PrintStatement
-              | ReadStatement
-              | Continue
-              | StopStatement
+    Statement : StatementContent
     """
 
     #           | WriteStatement  -> SEE LATER
     # """
 
+def p_label_statement(p):
+    r"""
+    Statement : LABEL StatementContent
+    """
+
 def p_program_unit(p):
     r"""
     ProgramUnit : Program
                 | FunctionDeclaration
+    """
+
+def p_statement_content(p):
+    r"""
+    StatementContent : Declaration
+                        | Assignment
+                        | IfStatement
+                        | ForStatement
+                        | GotoStatement
+                        | PrintStatement
+                        | ReadStatement
+                        | ParameterStatement
+                        | Continue
+                        | StopStatement
     """
 
 def p_parse(p):
@@ -241,12 +306,15 @@ def p_parse(p):
 class ParseError(Exception):
     pass
 
+class SemanticError(Exception):
+    pass
+
 def p_error(t):
-    raise ParseError(f"Parse Error: Unexpected token: {t.type if t else '$'}")
+    raise ParseError(f"Parse Error: Unexpected token: {t.type if t else '$'} (token value: {t.value}) at line {t.lineno if t else 'EOF'}")
 
 # Build parser
 parser = yacc.yacc(start="ProgramUnitList", write_tables=False)
-parser.vars = {} # inicializar o dicionário!!!
+parser.symbol_table = SymbolTable()
 parser.quit = False
 
 

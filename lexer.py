@@ -26,17 +26,28 @@ reserved = {
 }
 
 tokens = ["LABEL", "INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DOUBLE",
-          "OPADDSUB", "OPDIV", "OPMUL", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT"]+ list(reserved.values())
+          "OPADDSUB", "OPDIV", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT", "CONTINUATION"]+ list(reserved.values())
 
 
 def t_COMMENT(t):
     # capturar linhas de comentário que começam na coluna 1 com 'C' ou '*'
-    r'(?m)^[cC\*][^\n]*'
+    r'(?m:^[cC*].*)'
     pass # ignorar os comentários, não precisamos deles para a análise sintática
+
+def t_DOUBLE(t):
+    r"DOUBLE\s+PRECISION"
+    t.value = "DOUBLE PRECISION"
+    return t
+
+def t_NREAL(t):
+    r"(?:\d+\.\d*|\.\d+)(?:[eEdD][+\-]?\d+)?"
+    t.value = float(t.value.replace('D', 'E').replace('d', 'E')) 
+    t.value = float(t.value) 
+    return t
 
 def t_LABEL(t):
     r"\d+"
-    s = t.value     # para verificar se o número é um label ou um inteiro, dependendo da posição (coluna) onde ele aparece
+    s = t.value
     data = t.lexer.lexdata  # o texto completo que está sendo analisado
     pos = t.lexpos  # a posição atual do token no texto (índice do primeiro caractere do token)
     last_nl = data.rfind('\n', 0, pos) # posição do último \n antes do token, ou -1 se não houver \n
@@ -47,16 +58,6 @@ def t_LABEL(t):
         return t
     t.type = "INT"
     t.value = int(s)
-    return t
-
-def t_DOUBLE(t):
-    r"DOUBLE\s+PRECISION"
-    t.value = "DOUBLE PRECISION"
-    return t
-
-def t_NREAL(t):
-    r"(?:\d+\.\d*|\.\d+)"
-    t.value = float(t.value) 
     return t
 
 def t_INT(t):
@@ -71,6 +72,11 @@ def t_BOOL(t):
     else:
         t.value = False
     return t
+
+def t_CONTINUATION(t):
+    r'\n[ ]{5}[^0\s]'
+    t.lexer.lineno += 1 # contar a linha de continuação como uma nova linha
+    pass
 
 def t_newline(t):
     r"\n+"
@@ -90,8 +96,7 @@ def t_STRING(t):
 t_CONCAT = r"//" # operador de concatenação
 t_POWER = r"\*\*" # operador de potência
 t_OPADDSUB = r"[+\-]" # operadores de adição e subtração
-t_OPDIV = r"/" # operadores de multiplicação e divisão
-t_OPMUL = r"\*" # operador de multiplicação (para evitar confusão com o operador de potência)
+t_OPDIV = r"/" # operadores de divisão
 t_EQUALS = r"=" # operador de atribuição
 t_EQ = r'\.EQ\.'
 t_NE = r'\.NE\.'
