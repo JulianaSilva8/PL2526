@@ -23,19 +23,31 @@ reserved = {
     "WRITE": "WRITE",
     "CHARACTER": "CHARACTER",
     "PARAMETER": "PARAMETER", # PARAMETER define uma constante, enquanto x = 10 define uma variável.
-    "LABEL": "LABEL"
 }
 
-tokens = ["INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DOUBLE",
-          "OPADDSUB", "OPDIV", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT"]+ list(reserved.values())
+tokens = ["LABEL", "INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DOUBLE",
+          "OPADDSUB", "OPDIV", "OPMUL", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT"]+ list(reserved.values())
 
 
 def t_COMMENT(t):
-    # capturar o comentário inteiro (o resto da linha)
-    r'(^|\n)[cC*].*'
-    # t.value = t.value[7:] # ignorar \n + o conteúdo nas colunas reservadas
-    # return t
+    # capturar linhas de comentário que começam na coluna 1 com 'C' ou '*'
+    r'(?m)^[cC\*][^\n]*'
     pass # ignorar os comentários, não precisamos deles para a análise sintática
+
+def t_LABEL(t):
+    r"\d+"
+    s = t.value     # para verificar se o número é um label ou um inteiro, dependendo da posição (coluna) onde ele aparece
+    data = t.lexer.lexdata  # o texto completo que está sendo analisado
+    pos = t.lexpos  # a posição atual do token no texto (índice do primeiro caractere do token)
+    last_nl = data.rfind('\n', 0, pos) # posição do último \n antes do token, ou -1 se não houver \n
+    col = pos - last_nl # 1-based column
+    if col <= 5 and len(s) <= 5: # labels devem estar nas colunas 1-5 e ter no máximo 5 dígitos
+        t.type = "LABEL"
+        t.value = int(s)
+        return t
+    t.type = "INT"
+    t.value = int(s)
+    return t
 
 def t_DOUBLE(t):
     r"DOUBLE\s+PRECISION"
@@ -43,7 +55,7 @@ def t_DOUBLE(t):
     return t
 
 def t_NREAL(t):
-    r"\d+\.\d*"
+    r"(?:\d+\.\d*|\.\d+)"
     t.value = float(t.value) 
     return t
 
@@ -74,12 +86,12 @@ def t_STRING(t):
     t.value = t.value[1:-1]
     return t
 
-literals = "(),*'"
 
 t_CONCAT = r"//" # operador de concatenação
 t_POWER = r"\*\*" # operador de potência
 t_OPADDSUB = r"[+\-]" # operadores de adição e subtração
 t_OPDIV = r"/" # operadores de multiplicação e divisão
+t_OPMUL = r"\*" # operador de multiplicação (para evitar confusão com o operador de potência)
 t_EQUALS = r"=" # operador de atribuição
 t_EQ = r'\.EQ\.'
 t_NE = r'\.NE\.'
@@ -92,6 +104,7 @@ t_OR = r'\.OR\.'
 t_NOT = r'\.NOT\.'
 t_ignore = " \t"
 
+literals = "(),*'"
 
 class LexError(Exception):
     pass
