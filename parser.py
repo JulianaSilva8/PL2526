@@ -12,9 +12,9 @@ def p_declaration(p):
     for var in p[2]:
         if isinstance(var, tuple):  # array decl
             var_name, size = var
-            parser.symbol_table.add_variable(var_name, type_name, is_array=True, size=size)
+            parser.symbol_table.add_symbol(var_name, type_name, is_array=True, size=size)
         else:  # regular variable declaration
-            parser.symbol_table.add_variable(var, type_name)
+            parser.symbol_table.add_symbol(var, type_name)
 
 
 def p_var_decl(p):
@@ -51,22 +51,31 @@ def p_type(p):
          | DOUBLE
          | CHARACTER
     """
+    p[0] = p[1] 
 
 def p_parameter_statement(p):
     r"""
     ParameterStatement : PARAMETER "(" ParamAssignList ")"
     """
+    for var, value in p[3]:
+        parser.symbol_table.add_symbol(var, is_parameter=True)
+        parser.symbol_table.update_symbol(var, value)
 
 def p_param_assign_list(p):
     r"""
     ParamAssignList : ParamAssign
                     | ParamAssignList "," ParamAssign
     """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[3]]
 
 def p_param_assign(p):
     r"""
     ParamAssign : VAR EQUALS Expression
     """
+    p[0] = (p[1], p[3])
 
 # ver: parenteses nas expressões e NOT
 
@@ -84,18 +93,30 @@ def p_logical_expression(p):
     Expression : LogicalTerm
                | Expression OR LogicalTerm
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ('OR', p[1], p[3])
 
 def p_logical_term(p):
     r"""
     LogicalTerm : LogicalFactor
                 | LogicalTerm AND LogicalFactor
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ('AND', p[1], p[3])
 
 def p_logical_factor(p):
     r"""
     LogicalFactor : NOT LogicalFactor
                   | NonLogicalExpression
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ('NOT', p[2])
 
 # JU !!!!!!!1
 def p_nonlogical_expression(p):
