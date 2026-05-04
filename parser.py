@@ -3,6 +3,7 @@ import sys
 from ply import lex, yacc
 from lexer import lexer, tokens
 from symbol_table import SymbolTable
+from errors import ParseError, SemanticError
 
 def p_declaration(p):
     r"""
@@ -276,23 +277,36 @@ def p_print_statement(p): # print sem args -> linha vazia
     PrintStatement : PRINT Format "," ArgList
                    | PRINT Format
     """
+    if len(p) == 3:
+        # PRINT Format
+        p[0] = ('PRINT', p[2], [])
+    else:
+        # PRINT Format , ArgList
+        p[0] = ('PRINT', p[2], p[4])
 
 def p_read_arg(p):
     r"""
     ReadArg : VAR
             | IndexOrCall
     """
+    p[0] = p[1]
 
 def p_read_arg_list(p):
     r"""
     ReadArgList : ReadArg
                 | ReadArgList "," ReadArg
     """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[3]]
 
 def p_read_statement(p):
     r"""
     ReadStatement : READ Format "," ReadArgList
     """
+    # READ Format , ReadArgList
+    p[0] = ('READ', p[2], p[4])
 
 # def p_write_statement(p): # SEE
 #     r"""
@@ -316,6 +330,7 @@ def p_format(p):
     #         | STRING_LITERAL
     # """
     # TIMES é o '*'
+    p[0] = p[1]
     # INT_CONST é o label (ex: 100)
     # STRING_LITERAL é a formatação in-line (ex: '(A, I5)')
 
@@ -323,23 +338,29 @@ def p_assignment(p):
     r"""
     Assignment : VAR EQUALS Expression
     """
+    p[0] = ('ASSIGN', p[1], p[3])
 
 def p_program(p):
     r"""
     Program : PROGRAM VAR StatementList END
     """
+    p[0] = ('PROGRAM', p[2], p[3])
 
 def p_statement_list(p):
     r"""
     StatementList : Statement
                   | StatementList Statement
     """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[2]]
 
 def p_statement(p):
     r"""
     Statement : StatementContent
     """
-
+    p[0] = p[1]
     #           | WriteStatement  -> SEE LATER
     # """
 
@@ -347,12 +368,14 @@ def p_label_statement(p):
     r"""
     Statement : LABEL StatementContent
     """
+    p[0] = ('LABEL', p[1], p[2])
 
 def p_program_unit(p):
     r"""
     ProgramUnit : Program
                 | FunctionDeclaration
     """
+    p[0] = p[1]
 
 def p_statement_content(p):
     r"""
@@ -367,18 +390,23 @@ def p_statement_content(p):
                         | Continue
                         | StopStatement
     """
+    p[0] = p[1]
 
 def p_parse(p):
     r"""
     ProgramUnitList : ProgramUnitList ProgramUnit
                     | ProgramUnit
     """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[2]]
 
-class ParseError(Exception):
-    pass
+# class ParseError(Exception):
+#     pass
 
-class SemanticError(Exception):
-    pass
+# class SemanticError(Exception):
+#     pass
 
 def p_error(t):
     raise ParseError(f"Parse Error: Unexpected token: {t.type if t else '$'} (token value: {t.value}) at line {t.lineno if t else 'EOF'}")

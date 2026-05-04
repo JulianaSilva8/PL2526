@@ -1,4 +1,4 @@
-from parser import SemanticError
+from errors import SemanticError
 
 class SymbolTable:
     def __init__(self):
