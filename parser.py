@@ -124,6 +124,10 @@ def p_nonlogical_expression(p):
     NonLogicalExpression : AdditiveExpression
                         | AdditiveExpression RelationalOp AdditiveExpression
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = (p[2], p[1], p[3])
 
 def p_relational_op(p):
     r"""
@@ -134,12 +138,18 @@ def p_relational_op(p):
                  | EQ
                  | NE
     """
+    p[0] = p.slice[1].type # para ter LE e não .LE.
 
 def p_additive_expression(p):
     r"""
     AdditiveExpression : Term
                        | AdditiveExpression OPADDSUB Term
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = (p[2], p[1], p[3])
+
 
 def p_multiplicative_expression(p):
     r"""
@@ -148,18 +158,32 @@ def p_multiplicative_expression(p):
          | Term '*' PowerExpression
          | MOD "(" Term "," PowerExpression ")"
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 7:
+        p[0] = ('MOD', p[3], p[5])
+    else:
+        p[0] = (p[2], p[1], p[3])
 
 def p_power_expression(p):
     r"""
     PowerExpression : ConcatenationExpression
                     | PowerExpression POWER ConcatenationExpression
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ('POWER', p[1], p[3])
 
 def p_concatenation_expression(p):
     r"""
     ConcatenationExpression : ExpressionElement
                           | ConcatenationExpression CONCAT ExpressionElement
     """
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ('CONCAT', p[1], p[3])
 
 def p_expression_element(p):
     r"""
@@ -171,7 +195,10 @@ def p_expression_element(p):
                       | STRING
                       | "(" Expression ")"
     """
-
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = p[2]
 
 def p_if_statement(p):
     r"""
@@ -179,39 +206,58 @@ def p_if_statement(p):
                 | IF Expression THEN StatementList ELSE StatementList ENDIF
                 | IF Expression StatementContent
     """
+    if len(p) == 6:
+        p[0] = ('IF', p[2], p[4], None)
+    elif len(p) == 8:
+        p[0] = ('IF', p[2], p[4], p[6])
+    else:
+        p[0] = ('IF', p[2], [p[3]], None)
+
+
 
 def p_for_statement(p): # não é suppsto incluir os statements dentro do for -> isso é tratado na análise semântica
     r"""
     ForStatement : DO INT VAR EQUALS Expression "," Expression
     """
+    p[0] = ('DO', p[2], p[3], p[5], p[7])
 
 def p_arg_list(p):
     r"""
     ArgList : Expression
             | ArgList "," Expression
     """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[3]]
 
 def p_function_declaration(p):
     r"""
     FunctionDeclaration : Type FUNCTION IndexOrCall StatementList RETURN END
     """
-
+    p[0] = ('FUNCTION', p[1], p[3], p[4])
 
 def p_index_or_call(p):
     r"""
     IndexOrCall : VAR "(" ArgList ")"
                 | VAR "(" ")"
     """
+    if len(p) == 5:
+        p[0] = ('INDEX_OR_CALL', p[1], p[3])
+    else:
+        p[0] = ('INDEX_OR_CALL', p[1], [])
 
 def p_continue(p):
     r"""
     Continue : CONTINUE
     """
+    p[0] = ('CONTINUE',)
 
 def p_goto_statement(p):
     r"""
     GotoStatement : GOTO INT
     """
+    p[0] = ('GOTO', p[2])
 
 def p_stop_statement(p): # args opcionais: String of no more that 5 digits or a character constant 
     r"""
@@ -219,6 +265,10 @@ def p_stop_statement(p): # args opcionais: String of no more that 5 digits or a 
                   | STOP INT
                   | STOP
     """
+    if len(p) == 2:
+        p[0] = ('STOP', None)
+    else:
+        p[0] = ('STOP', p[2])
 
 # SOFIA !! 
 def p_print_statement(p): # print sem args -> linha vazia 
