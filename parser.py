@@ -14,10 +14,10 @@ def p_declaration(p):
     for var in p[2]:
         if isinstance(var, tuple):  # array decl
             var_name, size = var
-            parser.symbol_table.add_symbol(var_name, type_name, is_array=True, size=size)
+            parser.symbol_table.declare(var_name, var_type=type_name, is_array=True, size=size)
             vars_declared.append((var_name, type_name, size))
         else:  # regular variable declaration
-            parser.symbol_table.add_symbol(var, type_name)
+            parser.symbol_table.declare(var, var_type=type_name)
             vars_declared.append((var, type_name))
     p[0] = ('DECLARE', type_name, vars_declared)
 
@@ -64,8 +64,7 @@ def p_parameter_statement(p):
     """
     params = []
     for var, value in p[3]:
-        parser.symbol_table.add_symbol(var, is_parameter=True)
-        parser.symbol_table.update_symbol(var, value)
+        parser.symbol_table.declare(var, is_parameter=True, value=value)
         params.append((var, value))
     p[0] = ('PARAMETER', params)
 
@@ -469,8 +468,7 @@ def main(args):
     with open(args[1], "r") as f:
         data = f.read()
     try: 
-        result=parser.parse(data, lexer=lexer)
-        print(f"{result}")
+        parser.parse(data, lexer=lexer)
         for tok in lexer:
             print(tok)
     except Exception as e:
