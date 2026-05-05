@@ -46,7 +46,12 @@ class SymbolTable:
             'is_parameter': is_parameter,
             'value': value  # for parameters and constants
         }
-
+        
+    def get_index(self, name):
+        if name not in self.__table:
+            raise SemanticError(f"Undeclared variable: {name}")
+        return self.__table[name]['index']
+    
     def initialize(self, name):
         """
         Mark a variable as initialized.

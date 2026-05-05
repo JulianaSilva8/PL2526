@@ -154,8 +154,10 @@ def p_additive_expression(p):
     """
     if len(p) == 2:
         p[0] = p[1]
-    else:
-        p[0] = (p[2], p[1], p[3])
+    elif p[2] == '-':
+        p[0] = ('SUB', p[1], p[3])
+    elif p[2] == '+':
+        p[0] = ('ADD', p[1], p[3])
 
 
 def p_multiplicative_expression(p):
@@ -169,8 +171,10 @@ def p_multiplicative_expression(p):
         p[0] = p[1]
     elif len(p) == 7:
         p[0] = ('MOD', p[3], p[5])
-    else:
-        p[0] = (p[2], p[1], p[3])
+    elif p[2] == '/':
+        p[0] = ('DIV', p[1], p[3])
+    elif p[2] == '*':
+        p[0] = ('MUL', p[1], p[3])
 
 def p_power_expression(p):
     r"""
@@ -221,7 +225,6 @@ def p_if_statement(p):
         p[0] = ('IF', p[2], [p[3]], None)
 
 
-
 def p_for_statement(p): # não é suppsto incluir os statements dentro do for -> isso é tratado na análise semântica
     r"""
     ForStatement : DO INT VAR EQUALS Expression "," Expression
@@ -247,10 +250,7 @@ def p_function_declaration(p):
     FunctionDeclaration : Type FUNCTION IndexOrCall StatementList RETURN END
                         | Type FUNCTION IndexOrCall StatementList END
     """
-    if len(p) == 7:
-        p[0] = ('FUNCTION', p[1], p[3], p[4])
-    else:
-        p[0] = ('FUNCTION', p[1], p[3], p[4])  # implicit RETURN
+    p[0] = ('FUNCTION', p[1], p[3], p[4]) 
     parser.symbol_table = SymbolTable()  # Reset for next program unit
 
 def p_subroutine_declaration(p):
@@ -467,10 +467,9 @@ parser.quit = False
 def main(args):
     with open(args[1], "r") as f:
         data = f.read()
-    try: 
-        parser.parse(data, lexer=lexer)
-        for tok in lexer:
-            print(tok)
+    try:
+        ast = parser.parse(data, lexer=lexer)
+        print(ast)
     except Exception as e:
         print(e)
 
