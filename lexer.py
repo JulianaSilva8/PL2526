@@ -11,6 +11,8 @@ reserved = {
     "THEN": "THEN",
     "RETURN": "RETURN",
     "FUNCTION": "FUNCTION",
+    "SUBROUTINE": "SUBROUTINE",
+    "CALL": "CALL",
     "DO": "DO",
     "GOTO": "GOTO",
     "PRINT": "PRINT",

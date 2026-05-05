@@ -10,12 +10,16 @@ def p_declaration(p):
     Declaration : Type VarList
     """
     type_name = p[1]
+    vars_declared = []
     for var in p[2]:
         if isinstance(var, tuple):  # array decl
             var_name, size = var
             parser.symbol_table.add_symbol(var_name, type_name, is_array=True, size=size)
+            vars_declared.append((var_name, type_name, size))
         else:  # regular variable declaration
             parser.symbol_table.add_symbol(var, type_name)
+            vars_declared.append((var, type_name))
+    p[0] = ('DECLARE', type_name, vars_declared)
 
 
 def p_var_decl(p):
@@ -28,7 +32,7 @@ def p_var_decl_array(p):
     r"""
     VarDecl : VAR "(" INT ")"
     """
-    p[0] = (p[1], p[2])
+    p[0] = (p[1], p[3])
 
 def p_var_list_single(p):
     r"""
@@ -58,9 +62,12 @@ def p_parameter_statement(p):
     r"""
     ParameterStatement : PARAMETER "(" ParamAssignList ")"
     """
+    params = []
     for var, value in p[3]:
         parser.symbol_table.add_symbol(var, is_parameter=True)
         parser.symbol_table.update_symbol(var, value)
+        params.append((var, value))
+    p[0] = ('PARAMETER', params)
 
 def p_param_assign_list(p):
     r"""
@@ -219,8 +226,12 @@ def p_if_statement(p):
 def p_for_statement(p): # não é suppsto incluir os statements dentro do for -> isso é tratado na análise semântica
     r"""
     ForStatement : DO INT VAR EQUALS Expression "," Expression
+                 | DO INT VAR EQUALS Expression "," Expression "," Expression
     """
-    p[0] = ('DO', p[2], p[3], p[5], p[7])
+    if len(p) == 8:
+        p[0] = ('DO', p[2], p[3], p[5], p[7], 1)  # default step = 1
+    else:
+        p[0] = ('DO', p[2], p[3], p[5], p[7], p[9])
 
 def p_arg_list(p):
     r"""
@@ -235,8 +246,46 @@ def p_arg_list(p):
 def p_function_declaration(p):
     r"""
     FunctionDeclaration : Type FUNCTION IndexOrCall StatementList RETURN END
+                        | Type FUNCTION IndexOrCall StatementList END
     """
-    p[0] = ('FUNCTION', p[1], p[3], p[4])
+    if len(p) == 7:
+        p[0] = ('FUNCTION', p[1], p[3], p[4])
+    else:
+        p[0] = ('FUNCTION', p[1], p[3], p[4])  # implicit RETURN
+    parser.symbol_table = SymbolTable()  # Reset for next program unit
+
+def p_subroutine_declaration(p):
+    r"""
+    SubroutineDeclaration : SUBROUTINE VAR StatementList END
+                          | SUBROUTINE VAR "(" ArgList ")" StatementList END
+                          | SUBROUTINE VAR "(" ")" StatementList END
+    """
+    if len(p) == 5:
+        # SUBROUTINE VAR StatementList END
+        p[0] = ('SUBROUTINE', p[2], [], p[3])
+    elif len(p) == 8:
+        # SUBROUTINE VAR "(" ArgList ")" StatementList END
+        p[0] = ('SUBROUTINE', p[2], p[4], p[6])
+    else:
+        # SUBROUTINE VAR "(" ")" StatementList END
+        p[0] = ('SUBROUTINE', p[2], [], p[5])
+    parser.symbol_table = SymbolTable()  # Reset for next program unit
+
+def p_call_statement(p):
+    r"""
+    CallStatement : CALL VAR
+                  | CALL VAR "(" ArgList ")"
+                  | CALL VAR "(" ")"
+    """
+    if len(p) == 3:
+        # CALL VAR
+        p[0] = ('CALL', p[2], [])
+    elif len(p) == 6:
+        # CALL VAR "(" ArgList ")"
+        p[0] = ('CALL', p[2], p[4])
+    else:
+        # CALL VAR "(" ")"
+        p[0] = ('CALL', p[2], [])
 
 def p_index_or_call(p):
     r"""
@@ -325,14 +374,10 @@ def p_read_statement(p):
 def p_format(p):
     r"""
     Format : "*"
+           | INT
+           | STRING
     """
-    #         | INT_CONST
-    #         | STRING_LITERAL
-    # """
-    # TIMES é o '*'
     p[0] = p[1]
-    # INT_CONST é o label (ex: 100)
-    # STRING_LITERAL é a formatação in-line (ex: '(A, I5)')
 
 def p_assignment(p):
     r"""
@@ -345,6 +390,7 @@ def p_program(p):
     Program : PROGRAM VAR StatementList END
     """
     p[0] = ('PROGRAM', p[2], p[3])
+    parser.symbol_table = SymbolTable()  # Reset for next program unit
 
 def p_statement_list(p):
     r"""
@@ -374,6 +420,7 @@ def p_program_unit(p):
     r"""
     ProgramUnit : Program
                 | FunctionDeclaration
+                | SubroutineDeclaration
     """
     p[0] = p[1]
 
@@ -389,6 +436,7 @@ def p_statement_content(p):
                         | ParameterStatement
                         | Continue
                         | StopStatement
+                        | CallStatement
     """
     p[0] = p[1]
 
@@ -421,7 +469,8 @@ def main(args):
     with open(args[1], "r") as f:
         data = f.read()
     try: 
-        parser.parse(data, lexer=lexer)
+        result=parser.parse(data, lexer=lexer)
+        print(f"{result}")
         for tok in lexer:
             print(tok)
     except Exception as e:

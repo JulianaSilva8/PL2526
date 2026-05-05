@@ -4,14 +4,15 @@ class SymbolTable:
     def __init__(self):
         self.symbols = {}
 
-    def add_symbol(self, name, type=None, is_array=False, is_parameter=False):
+    def add_symbol(self, name, type=None, is_array=False, size=None, is_parameter=False):
         if name in self.symbols:
             raise SemanticError(f"Symbol '{name}' already declared.")
         
         self.symbols[name] = {
             'type': type,
             'is_parameter': is_parameter,
-            'is_array': is_array
+            'is_array': is_array,
+            'size': size
         }
 
     def update_symbol(self, name, value):
