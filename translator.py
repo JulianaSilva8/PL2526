@@ -6,7 +6,7 @@ class Translator:
     def __init__(self, symbol_table):
         self.symbol_table = symbol_table        
         self.label_count = 0
-        self.functions_code = {} # para armazenar o código de cada função/subrotina
+        # self.functions_code = {} # para armazenar o código de cada função/subrotina
         self.current_scope = None # None - escopo global, ou nome da função/subrotina atual
         self.variables = {}
         self.next_addr = 0
@@ -14,7 +14,12 @@ class Translator:
 
     def translate(self, node):
         if isinstance(node, list):
-            return "\n".join([self.translate(n) for n in node])
+            results = []
+            for n in node:
+                result = self.translate(n)
+                if result:  # Ignorar None e strings vazias
+                    results.append(result)
+            return "\n".join(results) if results else ""
         
         if not isinstance(node, tuple): #erro
             return str(node) # Caso seja um valor atómico (INT, VAR)
@@ -381,3 +386,321 @@ class Translator:
     def gen_goto(self, node):
         _, label = node
         return f"JUMP LABEL_{label}"
+       
+    def gen_if(self, node):
+        _, condition, then_body, else_body = node
+        code = []
+        
+        # Gerar labels únicos para os ramos
+        self.label_count += 1
+        else_label = f"ELSE_{self.label_count}"
+        end_label = f"ENDIF_{self.label_count}"
+        
+        # Traduzir a condição
+        if isinstance(condition, tuple):
+            cond_code = self.translate(condition)
+            if cond_code:
+                code.extend(cond_code.splitlines() if isinstance(cond_code, str) else cond_code)
+        elif isinstance(condition, bool):
+            code.append(f"PUSHI {1 if condition else 0}")
+        elif isinstance(condition, int):
+            code.append(f"PUSHI {condition}")
+        elif isinstance(condition, float):
+            code.append(f"PUSHF {condition}")
+        elif isinstance(condition, str):
+            idx = self.symbol_table.get_index(condition)
+            code.append(f"PUSHG {idx}")
+            
+        # Se condição falsa, pular para else (ou fim se não houver else)
+        if else_body:
+            code.append(f"JUMP {end_label}")
+            code.append(f"{else_label}:")
+            else_code = self.translate(else_body)
+            if else_code:
+                code.extend(else_code.splitlines())
+        
+        code.append(f"{end_label}:")
+        return "\n".join(code)
+    
+    def gen_call(self, node): # NAO PERCEBI ESTA
+        _, name, args = node
+        code = []
+
+        # Em Fortran, subrotinas recebem argumentos por referência.
+        # Para cada argumento, calculamos o seu endereço absoluto
+        # com PUSHGP (base do frame global) + PUSHI idx + PADD (soma de endereço).
+        # A subrotina depois usa LOAD 0 / STORE 0 para ler/escrever pelo endereço.
+        for arg in args:
+            if isinstance(arg, str):
+                # Variável simples: calcular endereço gp + idx
+                idx = self.symbol_table.get_index(arg)
+                code.append("PUSHGP")        # empurrar base do frame global
+                code.append(f"PUSHI {idx}")  # empurrar o offset da variável
+                code.append("PADD")          # endereço final = base + offset
+
+            elif isinstance(arg, tuple) and arg[0] == 'INDEX_OR_CALL':
+                # Elemento de array: NUMS(I) -> endereço = base_array + (I - 1)
+                _, arr_name, indices = arg
+                arr_idx = self.symbol_table.get_index(arr_name)
+                code.append("PUSHGP")           # base do frame global
+                code.append(f"PUSHI {arr_idx}") # offset do array
+                code.append("PADD")             # endereço base do array
+                # Calcular o índice (Fortran é 1-based, converter para 0-based)
+                index_expr = indices[0] if indices else 0
+                if isinstance(index_expr, tuple):
+                    index_code = self.translate(index_expr)
+                    if index_code:
+                        code.extend(index_code.splitlines())
+                elif isinstance(index_expr, int):
+                    code.append(f"PUSHI {index_expr}")
+                elif isinstance(index_expr, str):
+                    idx_i = self.symbol_table.get_index(index_expr)
+                    code.append(f"PUSHG {idx_i}")
+                code.append("PUSHI 1")  # ajuste 1-based -> 0-based
+                code.append("SUB")
+                code.append("PADD")     # endereço final do elemento
+
+            elif isinstance(arg, int):
+                code.append(f"PUSHI {arg}")
+            elif isinstance(arg, float):
+                code.append(f"PUSHF {arg}")
+            elif isinstance(arg, tuple):
+                # Expressão calculada: traduzir normalmente
+                arg_code = self.translate(arg)
+                if arg_code:
+                    code.extend(arg_code.splitlines())
+
+        # Empurrar o endereço da label da subrotina e chamar
+        code.append(f"PUSHA FUNC_{name}") # PUSHA: push do endereço da função/subrotina
+        code.append("CALL")
+        return "\n".join(code)
+    
+    def gen_write(self, node):
+        # WRITE ainda não está totalmente no parser (control_spec ignorado por agora)
+        # Comportamento igual ao gen_print
+        _, control_spec, args = node
+        code = []
+
+        # Sem argumentos: imprimir linha vazia
+        if not args:
+            code.append("WRITELN")
+            return "\n".join(code)
+
+        for arg in args:
+            if isinstance(arg, bool):
+                code.append('PUSHS ".TRUE."' if arg else 'PUSHS ".FALSE."')
+                code.append("WRITES")
+            elif isinstance(arg, int):
+                code.append(f"PUSHI {arg}")
+                code.append("WRITEI")
+            elif isinstance(arg, float):
+                code.append(f"PUSHF {arg}")
+                code.append("WRITEF")
+            elif isinstance(arg, str):
+                try:
+                    # Tentar encontrar na symbol table — é uma variável
+                    idx = self.symbol_table.get_index(arg)
+                    var_type = self.symbol_table.get_type(arg)
+                    code.append(f"PUSHG {idx}")  # buscar valor da variável
+                    # Escolher a instrução de escrita conforme o tipo
+                    if var_type in ("REAL", "DOUBLE"):
+                        code.append("WRITEF")
+                    elif var_type == "CHARACTER":
+                        code.append("WRITES")
+                    else:  # INTEGER, LOGICAL
+                        code.append("WRITEI")
+                except Exception:
+                    # Não está na symbol table — é uma string literal
+                    arg = arg.replace('"', '\\"')  # escapar aspas internas
+                    code.append(f'PUSHS "{arg}"')
+                    code.append("WRITES")
+            elif isinstance(arg, tuple):
+                arg_code = self.translate(arg)
+                if arg_code:
+                    code.extend(arg_code.splitlines())
+                code.append("WRITEI")
+
+        code.append("WRITELN")
+        return "\n".join(code)
+
+    
+    def gen_relational(self, node):
+        op, left, right = node
+        code = []
+
+        # --- Traduzir lado esquerdo ---
+        if isinstance(left, tuple):
+            left_code = self.translate(left)
+            if left_code:
+                code.extend(left_code.splitlines())
+        elif isinstance(left, bool):
+            code.append(f"PUSHI {1 if left else 0}")
+        elif isinstance(left, int):
+            code.append(f"PUSHI {left}")
+        elif isinstance(left, float):
+            code.append(f"PUSHF {left}")
+        elif isinstance(left, str):
+            idx = self.symbol_table.get_index(left)
+            code.append(f"PUSHG {idx}")
+
+        # --- Traduzir lado direito ---
+        if isinstance(right, tuple):
+            right_code = self.translate(right)
+            if right_code:
+                code.extend(right_code.splitlines())
+        elif isinstance(right, bool):
+            code.append(f"PUSHI {1 if right else 0}")
+        elif isinstance(right, int):
+            code.append(f"PUSHI {right}")
+        elif isinstance(right, float):
+            code.append(f"PUSHF {right}")
+        elif isinstance(right, str):
+            idx = self.symbol_table.get_index(right)
+            code.append(f"PUSHG {idx}")
+
+        # --- Aplicar operador relacional ---
+        if op == 'LT':
+            code.append("INF")       # m < n
+        elif op == 'GT':
+            code.append("SUP")       # m > n
+        elif op == 'LE':
+            code.append("INFEQ")     # m <= n
+        elif op == 'GE':
+            code.append("SUPEQ")     # m >= n
+        elif op == 'EQ':
+            code.append("EQUAL")     # m == n
+        elif op == 'NE': # m != n é equivalente a !(m == n)
+            code.append("EQUAL")     # m == n ...
+            code.append("NOT")       # ... negado -> m != n
+
+        return "\n".join(code)
+    
+    def gen_logical(self, node):
+        op, left, right = node
+        code = []
+
+        # --- Traduzir lado esquerdo ---
+        if isinstance(left, tuple):
+            left_code = self.translate(left)
+            if left_code:
+                code.extend(left_code.splitlines())
+        elif isinstance(left, bool):
+            code.append(f"PUSHI {1 if left else 0}")
+        elif isinstance(left, int):
+            code.append(f"PUSHI {left}")
+        elif isinstance(left, float):
+            code.append(f"PUSHF {left}")
+        elif isinstance(left, str):
+            idx = self.symbol_table.get_index(left)
+            code.append(f"PUSHG {idx}")
+
+        # --- Traduzir lado direito ---
+        if isinstance(right, tuple):
+            right_code = self.translate(right)
+            if right_code:
+                code.extend(right_code.splitlines())
+        elif isinstance(right, bool):
+            code.append(f"PUSHI {1 if right else 0}")
+        elif isinstance(right, int):
+            code.append(f"PUSHI {right}")
+        elif isinstance(right, float):
+            code.append(f"PUSHF {right}")
+        elif isinstance(right, str):
+            idx = self.symbol_table.get_index(right)
+            code.append(f"PUSHG {idx}")
+
+        # --- Aplicar operador lógico ---
+        if op == 'AND':
+            code.append("AND")
+        elif op == 'OR':
+            code.append("OR")
+
+        return "\n".join(code)
+    
+    def gen_parameter(self, node):
+        _, params = node
+        code = []
+
+        # PARAMETER declara constantes em Fortran.
+        # O parser já as registou na symbol table com is_parameter=True e value=valor.
+        # Aqui geramos código para inicializar essas posições de memória em runtime,
+        # porque a VM não tem conceito de constantes — são apenas variáveis que não mudam.
+        for var, value in params:
+            idx = self.symbol_table.get_index(var)  # posição global da constante
+
+            if isinstance(value, bool):
+                code.append(f"PUSHI {1 if value else 0}")
+            elif isinstance(value, int):
+                code.append(f"PUSHI {value}")
+            elif isinstance(value, float):
+                code.append(f"PUSHF {value}")
+            elif isinstance(value, str):
+                code.append(f'PUSHS "{value}"')
+            elif isinstance(value, tuple):
+                val_code = self.translate(value)
+                if val_code:
+                    code.extend(val_code.splitlines())
+
+            code.append(f"STOREG {idx}")
+
+        return "\n".join(code)
+
+    
+    def gen_index_or_call(self, node):
+        _, name, indices_or_args = node
+        code = []
+
+        # Determinar se é acesso a array ou chamada de função
+        try:
+            is_array = self.symbol_table.is_array(name)
+        except Exception:
+            is_array = False
+
+        if is_array:
+            # --- Acesso a elemento de array ---
+            # Em EWVM, arrays são armazenados a partir do endereço gp[idx].
+            # O endereço do elemento i é: (gp + idx) + (i - 1)
+            arr_idx = self.symbol_table.get_index(name)
+            code.append("PUSHGP")            
+            code.append(f"PUSHI {arr_idx}")  
+            code.append("PADD")              
+
+            # Calcular o índice do elemento
+            index_expr = indices_or_args[0] if indices_or_args else 0
+            if isinstance(index_expr, tuple):
+                index_code = self.translate(index_expr)
+                if index_code:
+                    code.extend(index_code.splitlines())
+            elif isinstance(index_expr, int):
+                code.append(f"PUSHI {index_expr}")
+            elif isinstance(index_expr, str):
+                idx_i = self.symbol_table.get_index(index_expr)
+                code.append(f"PUSHG {idx_i}")
+
+            code.append("PUSHI 1")
+            code.append("SUB")
+            code.append("PADD")     
+            code.append("LOAD 0")   # ler o valor no endereço calculado
+        else:
+            # --- Chamada de função ---
+            # Funções em Fortran também recebem argumentos por referência.
+            # Para cada argumento, empurrar o seu endereço (PUSHGP + offset + PADD).
+            for arg in indices_or_args:
+                if isinstance(arg, str):
+                    idx = self.symbol_table.get_index(arg)
+                    code.append("PUSHGP")
+                    code.append(f"PUSHI {idx}")
+                    code.append("PADD")
+                elif isinstance(arg, int):
+                    code.append(f"PUSHI {arg}")
+                elif isinstance(arg, float):
+                    code.append(f"PUSHF {arg}")
+                elif isinstance(arg, tuple):
+                    arg_code = self.translate(arg)
+                    if arg_code:
+                        code.extend(arg_code.splitlines())
+
+            code.append(f"PUSHA FUNC_{name}")
+            code.append("CALL")
+
+        return "\n".join(code)
