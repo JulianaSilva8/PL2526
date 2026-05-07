@@ -239,9 +239,9 @@ def p_if_statement(p):
         p[0] = ('IF', p[2], [p[3]], None)
 
 
-def p_for_statement(p): # não é suppsto incluir os statements dentro do for -> isso é tratado na análise semântica
+def p_for_statement(p): # não é suppsto incluir os statements dentro do DO -> isso é tratado na análise semântica
     r"""
-    ForStatement : DO INT VAR EQUALS Expression "," Expression
+    DoStatement : DO INT VAR EQUALS Expression "," Expression
                  | DO INT VAR EQUALS Expression "," Expression "," Expression
     """
     var_name = p[3]
@@ -554,7 +554,7 @@ def p_statement_content(p):
     StatementContent : Declaration
                         | Assignment
                         | IfStatement
-                        | ForStatement
+                        | DoStatement
                         | GotoStatement
                         | PrintStatement
                         | ReadStatement
