@@ -91,7 +91,7 @@ def t_VAR(t):
 
 def t_STRING(t):
     r'\'[^\']*\''
-    t.value = t.value[1:-1]
+    # nao remover as aspas para depois conseguir fazer distinção de VARs na analise semântica
     return t
 
 

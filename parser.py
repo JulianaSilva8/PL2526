@@ -5,21 +5,25 @@ from lexer import lexer, tokens
 from symbol_table import SymbolTable
 from errors import ParseError, SemanticError
 
+
 def p_declaration(p):
     r"""
     Declaration : Type VarList
     """
     type_name = p[1]
-    vars_declared = []
+
+    if isinstance(type_name, tuple):
+        type_name, char_len = type_name
+    else:
+        type_name = type_name
+        char_len = None
     for var in p[2]:
         if isinstance(var, tuple):  # array decl
             var_name, size = var
-            parser.symbol_table.declare(var_name, var_type=type_name, is_array=True, size=size)
-            vars_declared.append((var_name, type_name, size))
+            parser.symbol_table.declare(var_name, var_type=type_name, is_array=True, size=size, char_len=char_len)
         else:  # regular variable declaration
-            parser.symbol_table.declare(var, var_type=type_name)
-            vars_declared.append((var, type_name))
-    p[0] = ('DECLARE', type_name, vars_declared)
+            parser.symbol_table.declare(var, var_type=type_name, char_len=char_len)
+    p[0] = ('DECLARE', type_name) # ignorado na translating phase 
 
 
 def p_var_decl(p):
@@ -55,8 +59,15 @@ def p_type(p):
          | LOGICAL
          | DOUBLE
          | CHARACTER
+         | CHARACTER "*" INT
     """
-    p[0] = p[1] 
+    if len(p) == 2:
+        if p[1] == "CHARACTER":
+            p[0] = ('CHARACTER', 1)
+        else:
+            p[0] = p[1]
+    else:
+        p[0] = ("CHARACTER", p[3])
 
 def p_parameter_statement(p):
     r"""
@@ -64,7 +75,10 @@ def p_parameter_statement(p):
     """
     params = []
     for var, value in p[3]:
-        parser.symbol_table.declare(var, is_parameter=True, value=value)
+        if not parser.symbol_table.is_constant_expression(value):
+            raise SemanticError(f"Value of PARAMETER '{var}' must be a constant expression.")
+        inferred_type = parser.symbol_table.get_expr_type(value)
+        parser.symbol_table.declare(var, var_type = inferred_type,is_parameter=True, value=value)
         params.append((var, value))
     p[0] = ('PARAMETER', params)
 
@@ -83,8 +97,6 @@ def p_param_assign(p):
     ParamAssign : VAR EQUALS Expression
     """
     p[0] = (p[1], p[3])
-
-# ver: parenteses nas expressões e NOT
 
 # hierarquia de operadores:
 # 1. Logical: AND, OR, NOT
@@ -125,7 +137,6 @@ def p_logical_factor(p):
     else:
         p[0] = ('NOT', p[2])
 
-# JU !!!!!!!1
 def p_nonlogical_expression(p):
     r"""
     NonLogicalExpression : AdditiveExpression
@@ -217,6 +228,9 @@ def p_if_statement(p):
                 | IF Expression THEN StatementList ELSE StatementList ENDIF
                 | IF Expression StatementContent
     """
+    if parser.symbol_table.get_expr_type(p[2]) != 'LOGICAL':
+        raise SemanticError("Condition expression in IF statement must be of type LOGICAL.")
+
     if len(p) == 6:
         p[0] = ('IF', p[2], p[4], None)
     elif len(p) == 8:
@@ -230,10 +244,35 @@ def p_for_statement(p): # não é suppsto incluir os statements dentro do for ->
     ForStatement : DO INT VAR EQUALS Expression "," Expression
                  | DO INT VAR EQUALS Expression "," Expression "," Expression
     """
+    var_name = p[3]
+    start = p[5]
+    end = p[7]
+    step = p[9] if len(p) == 10 else None
+
+    parser.symbol_table.set_value(var_name, start) # para garantir que a variável do DO é inicializada com o valor inicial antes de ser usada no corpo do DO
+    start_type = parser.symbol_table.get_expr_type(start)
+    end_type = parser.symbol_table.get_expr_type(end)
+    step_type = parser.symbol_table.get_expr_type(step) if step is not None else  None  # default step type is INT
+    
+    parser.symbol_table.register_goto_label(p[2])
+    parser.symbol_table.check_do_loop(var_name, start_type, end_type, step_type)
+
     if len(p) == 8:
         p[0] = ('DO', p[2], p[3], p[5], p[7], 1)  # default step = 1
     else:
         p[0] = ('DO', p[2], p[3], p[5], p[7], p[9])
+
+def p_return_statement(p):
+    r"""
+    ReturnStatement : RETURN
+    """
+    if parser.symbol_table.get_current_scope_type() not in ['FUNCTION', 'SUBROUTINE']:
+        raise SemanticError("RETURN statement cannot be used outside of a function or subroutine.")
+    
+    if not parser.symbol_table.is_return_value_assigned():
+        raise SemanticError("Function didn't assign a return value before RETURN statement.")
+    
+    p[0] = ('RETURN',)
 
 def p_arg_list(p):
     r"""
@@ -245,30 +284,74 @@ def p_arg_list(p):
     else:
         p[0] = p[1] + [p[3]]
 
+
+def p_formal_param_list(p): # parametros na declaração da função/subrotina
+    r"""
+    FormalParams : VAR
+                 | FormalParams "," VAR
+    """
+    
+    if len(p) == 2:
+        parser.symbol_table.declare(p[1], var_type=None, is_formal_parameter=True) # tipo terá de ser atribuido depois no corpo da função
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[3]]
+
+def p_function_header(p):
+    r"""
+    FunctionHeader : Type FUNCTION VAR
+    """
+    parser.symbol_table.push_scope(scope_name=p[3], scope_type='FUNCTION', return_type=p[1])
+    p[0] = (p[1], p[3])  # tipo de retorno e nome da função
+
+
 def p_function_declaration(p):
     r"""
-    FunctionDeclaration : Type FUNCTION IndexOrCall StatementList RETURN END
-                        | Type FUNCTION IndexOrCall StatementList END
+    FunctionDeclaration : FunctionHeader "(" FormalParams ")" StatementList END
+                        | FunctionHeader "(" ")" StatementList END
     """
-    p[0] = ('FUNCTION', p[1], p[3], p[4]) 
-    parser.symbol_table = SymbolTable()  # Reset for next program unit
+    if len(p) == 7:
+        params = p[3]
+        statement_list = p[5]
+    else:
+        params = []
+        statement_list = p[4]
+            
+    parser.symbol_table.pop_scope()
+    p[0] = ('FUNCTION', p[1][0], p[1][1], params, statement_list)
+
+
+def p_subroutine_header(p):
+    r"""
+    SubroutineHeader : SUBROUTINE VAR
+    """
+    parser.symbol_table.push_scope(scope_name=p[2], scope_type='SUBROUTINE')
+    p[0] = p[2]
 
 def p_subroutine_declaration(p):
     r"""
-    SubroutineDeclaration : SUBROUTINE VAR StatementList END
-                          | SUBROUTINE VAR "(" ArgList ")" StatementList END
-                          | SUBROUTINE VAR "(" ")" StatementList END
+    SubroutineDeclaration : SubroutineHeader StatementList END
+                          | SubroutineHeader "(" FormalParams ")" StatementList END
+                          | SubroutineHeader "(" ")" StatementList END
     """
-    if len(p) == 5:
+    if len(p) == 4:
         # SUBROUTINE VAR StatementList END
-        p[0] = ('SUBROUTINE', p[2], [], p[3])
-    elif len(p) == 8:
-        # SUBROUTINE VAR "(" ArgList ")" StatementList END
-        p[0] = ('SUBROUTINE', p[2], p[4], p[6])
+        params         = []
+        statement_list = p[2]
+    elif len(p) == 7:
+        # SUBROUTINE VAR "(" FormalParams ")" StatementList END
+        params         = p[3]
+        statement_list = p[5]
     else:
         # SUBROUTINE VAR "(" ")" StatementList END
-        p[0] = ('SUBROUTINE', p[2], [], p[5])
-    parser.symbol_table = SymbolTable()  # Reset for next program unit
+        params         = []
+        statement_list = p[4]
+ 
+    sub_name = p[1]
+    parser.symbol_table.pop_scope()
+    p[0] = ('SUBROUTINE', sub_name, params, statement_list)
+
+
 
 def p_call_statement(p):
     r"""
@@ -276,17 +359,15 @@ def p_call_statement(p):
                   | CALL VAR "(" ArgList ")"
                   | CALL VAR "(" ")"
     """
-    if len(p) == 3:
-        # CALL VAR
-        p[0] = ('CALL', p[2], [])
-    elif len(p) == 6:
-        # CALL VAR "(" ArgList ")"
-        p[0] = ('CALL', p[2], p[4])
-    else:
-        # CALL VAR "(" ")"
-        p[0] = ('CALL', p[2], [])
+    args = []
+    if len(p) == 6:
+        args = p[4]
+    # chamar a subrotina 
+    parser.symbol_table.add_subroutine_call(p[2], args) # para verificar agora ou no final se a subrotina foi declarada
 
-def p_index_or_call(p):
+    p[0] = ('CALL', p[2], args)
+
+def p_index_or_call(p): # 
     r"""
     IndexOrCall : VAR "(" ArgList ")"
                 | VAR "(" ")"
@@ -306,25 +387,35 @@ def p_goto_statement(p):
     r"""
     GotoStatement : GOTO INT
     """
+    parser.symbol_table.register_goto_label(p[2])
     p[0] = ('GOTO', p[2])
 
 def p_stop_statement(p): # args opcionais: String of no more that 5 digits or a character constant 
     r"""
-    StopStatement : STOP STRING
-                  | STOP INT
-                  | STOP
+    StopStatement : STOP
     """
     if len(p) == 2:
-        p[0] = ('STOP', None)
-    else:
-        p[0] = ('STOP', p[2])
+        p[0] = ('STOP', None, None)
 
-# SOFIA !! 
+def p_stop_statement_string(p):
+    r"""
+    StopStatement : STOP STRING
+    """
+    p[0] = ('STOP', 'STRING', p[2])
+
+def p_stop_statement_int(p):
+    r"""
+    StopStatement : STOP INT
+    """
+    p[0] = ('STOP', 'INT', p[2])
+
+
 def p_print_statement(p): # print sem args -> linha vazia 
     r"""
     PrintStatement : PRINT Format "," ArgList
                    | PRINT Format
     """
+    #parser.symbol_table.verify_format(p[2], p[4] if len(p) == 5 else []) # verificar que os argumentos são compatíveis com o formato
     if len(p) == 3:
         # PRINT Format
         p[0] = ('PRINT', p[2], [])
@@ -335,7 +426,13 @@ def p_print_statement(p): # print sem args -> linha vazia
 def p_read_arg(p):
     r"""
     ReadArg : VAR
-            | IndexOrCall
+    """
+    parser.symbol_table.initialize(p[1]) # para garantir que a variável foi declarada e inicializada antes de ser lida
+    p[0] = p[1]
+
+def p_read_arg_index_or_call(p):
+    r"""
+    ReadArg : IndexOrCall
     """
     p[0] = p[1]
 
@@ -354,6 +451,7 @@ def p_read_statement(p):
     ReadStatement : READ Format "," ReadArgList
     """
     # READ Format , ReadArgList
+    #parser.symbol_table.verify_format(p[2], p[4]) # verificar que os argumentos são compatíveis com o formato
     p[0] = ('READ', p[2], p[4])
 
 # def p_write_statement(p): # SEE
@@ -361,14 +459,26 @@ def p_read_statement(p):
 #     WriteStatement : WRITE "(" ControlPair ")" ArgList
 #                     | WRITE "(" ControlPair ")"
 #     """
+#     unit, ast = p[3]
+#     args = p[5] if len(p) == 6 else []
+
+#     parser.symbol_table.verify_format(ast, args) # verificar que os argumentos são compatíveis com o formato
+#     p[0] = ('WRITE', unit, ast, args)
+
 
 # def p_control_pair(p):
 #     r"""
-#     ControlPair : Expression "," Expression
-#                 | "*" "," Expression
-#                 | Expression "," "*"
-#                 | "*" "," "*"
+#     ControlPair : WriteUnit "," Format
 #     """
+#     p[0] = (p[1], p[3])
+
+# def p_write_unit(p):
+#     r"""
+#     WriteUnit : "*"
+#               | INT
+#               | VAR
+#     """
+#     p[0] = p[1]
 
 def p_format(p):
     r"""
@@ -378,18 +488,33 @@ def p_format(p):
     """
     p[0] = p[1]
 
-def p_assignment(p):
+def p_assignment(p): # ver caso de var ser acesso ao array
     r"""
     Assignment : VAR EQUALS Expression
     """
+    name = p[1]
+    value = p[3]
+    
+    parser.symbol_table.set_value(name, value)
+
     p[0] = ('ASSIGN', p[1], p[3])
+
+
+def p_program_header(p):
+    r"""
+    ProgramHeader : PROGRAM VAR
+    """
+    parser.symbol_table.push_scope(scope_name=p[2], scope_type='PROGRAM')
+    p[0] = p[2]
+
 
 def p_program(p):
     r"""
-    Program : PROGRAM VAR StatementList END
+    Program : ProgramHeader StatementList END
     """
-    p[0] = ('PROGRAM', p[2], p[3])
-    parser.symbol_table = SymbolTable()  # Reset for next program unit
+    parser.symbol_table.pop_scope() 
+    p[0] = ('PROGRAM', p[1], p[2])
+
 
 def p_statement_list(p):
     r"""
@@ -413,6 +538,7 @@ def p_label_statement(p):
     r"""
     Statement : LABEL StatementContent
     """
+    parser.symbol_table.declare_label(p[1], p[2])
     p[0] = ('LABEL', p[1], p[2])
 
 def p_program_unit(p):
@@ -436,7 +562,9 @@ def p_statement_content(p):
                         | Continue
                         | StopStatement
                         | CallStatement
+                        | ReturnStatement
     """
+    # WriteStatement
     p[0] = p[1]
 
 def p_parse(p):
@@ -469,6 +597,10 @@ def main(args):
         data = f.read()
     try:
         ast = parser.parse(data, lexer=lexer)
+
+        parser.symbol_table.verify_pending_gotos()
+        parser.symbol_table.verify_pending_calls()
+
         print(ast)
     except Exception as e:
         print(e)

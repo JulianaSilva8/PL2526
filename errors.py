@@ -5,3 +5,7 @@ class ParseError(Exception):
 class SemanticError(Exception):
     """Semantic errors raised by semantic analysis and symbol table."""
     pass
+
+class SemanticWarning(Warning):
+    """Semantic warnings raised by semantic analysis and symbol table."""
+    pass
