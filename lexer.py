@@ -136,9 +136,3 @@ def main(args):
 
 if __name__ == "__main__":
     main(sys.argv)
-
-# comentários - ju
-# labels - sofia
-
-# formatação in-line (ex: '(A, I5)') - su
-# geral - su
