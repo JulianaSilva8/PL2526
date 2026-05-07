@@ -292,9 +292,10 @@ def p_formal_param_list(p): # parametros na declaração da função/subrotina
     """
     
     if len(p) == 2:
-        parser.symbol_table.declare(p[1], var_type=None, is_formal_parameter=True) # tipo terá de ser atribuido depois no corpo da função
+        parser.symbol_table.declare(p[1], var_type=None, is_formal_param=True) # tipo terá de ser atribuido depois no corpo da função
         p[0] = [p[1]]
     else:
+        parser.symbol_table.declare(p[3], var_type=None, is_formal_param=True)
         p[0] = p[1] + [p[3]]
 
 def p_function_header(p):
@@ -452,6 +453,8 @@ def p_read_statement(p):
     """
     # READ Format , ReadArgList
     #parser.symbol_table.verify_format(p[2], p[4]) # verificar que os argumentos são compatíveis com o formato
+    for var_name in p[4]:
+        parser.symbol_table.initialize(var_name) # para garantir que as variáveis foram declaradas e inicializadas antes de serem lidas
     p[0] = ('READ', p[2], p[4])
 
 # def p_write_statement(p): # SEE
