@@ -123,7 +123,7 @@ class SymbolTable:
             return True
         elif type1 == 'LOGICAL' and type2 == 'LOGICAL':
             return True
-        elif type1 == 'CHARACTER' and type2 in ['CHARACTER', 'STRING']:
+        elif type1 in ['CHARACTER', 'STRING'] and type2 == 'CHARACTER':
             return True
         elif type1 == 'DOUBLE' and type2 in ['DOUBLE', 'REAL', 'INTEGER']:
             return True
@@ -178,7 +178,8 @@ class SymbolTable:
             if node[0] == '\'' and node[-1] == '\'':
                 if len(node) == 3:
                     return 'CHARACTER'
-                else: return 'STRING'
+                else: 
+                    return 'STRING'
 
             # senão é string ou char é var       
               
@@ -236,6 +237,13 @@ class SymbolTable:
                 return 'LOGICAL'
             else:
                 raise SemanticError(f"Operação {op} inválida entre {t1} e {t2}")
+            
+        if op == 'NOT':
+            t = self.get_expr_type(node[1])
+            if t == 'LOGICAL':
+                return 'LOGICAL'
+            else:
+                raise SemanticError(f"Operação NOT inválida sobre {t}")
         
         if op == 'CONCAT':
             t1 = self.get_expr_type(node[1])

@@ -454,34 +454,38 @@ def p_read_statement(p):
     # READ Format , ReadArgList
     #parser.symbol_table.verify_format(p[2], p[4]) # verificar que os argumentos são compatíveis com o formato
     for var_name in p[4]:
-        parser.symbol_table.initialize(var_name) # para garantir que as variáveis foram declaradas e inicializadas antes de serem lidas
+        if isinstance(var_name, str):
+            parser.symbol_table.initialize(var_name) # para garantir que as variáveis foram declaradas e inicializadas antes de serem lidas
+        elif isinstance(var_name, tuple) and var_name[0] == 'INDEX_OR_CALL':
+            array_name = var_name[1]
+            parser.symbol_table.initialize(array_name) # para garantir que o array foi declarado e inicializado antes de ser lido
     p[0] = ('READ', p[2], p[4])
 
-# def p_write_statement(p): # SEE
-#     r"""
-#     WriteStatement : WRITE "(" ControlPair ")" ArgList
-#                     | WRITE "(" ControlPair ")"
-#     """
-#     unit, ast = p[3]
-#     args = p[5] if len(p) == 6 else []
+def p_write_statement(p):
+    r"""
+    WriteStatement : WRITE "(" ControlPair ")" ArgList
+                   | WRITE "(" ControlPair ")"
+    """
+    control_spec = p[3]
+    args = p[5] if len(p) == 6 else []
 
-#     parser.symbol_table.verify_format(ast, args) # verificar que os argumentos são compatíveis com o formato
-#     p[0] = ('WRITE', unit, ast, args)
+    p[0] = ('WRITE', control_spec, args)
 
 
-# def p_control_pair(p):
-#     r"""
-#     ControlPair : WriteUnit "," Format
-#     """
-#     p[0] = (p[1], p[3])
+def p_control_pair(p):
+    r"""
+    ControlPair : WriteUnit "," Format
+    """
+    p[0] = (p[1], p[3])
 
-# def p_write_unit(p):
-#     r"""
-#     WriteUnit : "*"
-#               | INT
-#               | VAR
-#     """
-#     p[0] = p[1]
+
+def p_write_unit(p):
+    r"""
+    WriteUnit : "*"
+              | INT
+              | VAR
+    """
+    p[0] = p[1]
 
 def p_format(p):
     r"""
@@ -561,13 +565,13 @@ def p_statement_content(p):
                         | GotoStatement
                         | PrintStatement
                         | ReadStatement
+                        | WriteStatement
                         | ParameterStatement
                         | Continue
                         | StopStatement
                         | CallStatement
                         | ReturnStatement
     """
-    # WriteStatement
     p[0] = p[1]
 
 def p_parse(p):
