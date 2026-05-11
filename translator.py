@@ -11,6 +11,13 @@ class Translator:
         self.next_addr = 0
         self.pending_do = {} # para armazenar informações de loops DO pendentes (variável, limite inferior, limite superior, passo)
 
+    def get_push_instruction(self):
+        """Dependendo do tipo do scope atual, retorna a instrução de push correta (PUSHG para global, PUSHL para local)"""
+        if self.symbol_table.get_current_scope_type() == 'GLOBAL' or self.symbol_table.get_current_scope_type() == 'PROGRAM':
+            return "PUSHG"
+        else:
+            return "PUSHL"
+
     def translate(self, program_units):
         code = []
         
@@ -85,6 +92,8 @@ class Translator:
             return self.gen_parameter(node)
         elif op == 'INDEX_OR_CALL':                             #   SOFIA
             return self.gen_index_or_call(node)
+        elif op == 'RETURN':
+            return []
 
         return ["// Unhandled node: " + str(op)]
 
@@ -92,8 +101,8 @@ class Translator:
         code = []
         vars = self.symbol_table.get_table(self.current_scope)
         for name, value in vars.items():
-            if value['is_parameter'] or value['is_label'] or value['is_return_value'] or value['is_formal_param']:
-                continue # já inicializados
+            if value['is_label'] or value['is_return_value'] or value['is_formal_param']:
+                continue
             
             if value['is_array']:
                 # TO DO: ver casos em que size é uma expressao/variavel
@@ -114,7 +123,6 @@ class Translator:
                     code.append("PUSHS \"\"")
                 elif value['type'] == 'DOUBLE':
                     code.append("PUSHF 0.0")
-        print(code)
 
         return code
 
@@ -136,43 +144,64 @@ class Translator:
         self.current_scope = name
 
         code = []
+        pop_count = 0
         func_label = f"FUNC{name}"
         code.append(func_label + ":")
 
-        count = -1
-        for p in params: # push dos params
-            code.append(f"PUSHL {count}")
-            count -= 1
+        formal_params_count = -len(params)
+        for p in params:
+            pop_count += 1
+            code.append(f"PUSHL {formal_params_count}")
+            formal_params_count += 1
         
         self.symbol_table.go_to_scope(name) # entrar no escopo da função
-        code += self.allocate_vars() # alocar espaço para variáveis locais
+
+        return_addr = -len(params) - 1
+        self.symbol_table.set_return_address(name, return_addr) # reservar posição para valor de retorno da função
+        alloc_code =  self.allocate_vars()
+        if alloc_code:
+            pop_count += len(alloc_code)
+            code += alloc_code
+
 
         code += self.translate_node(body)
+
+        if pop_count > 0:
+            code.append(f"POP {pop_count}") # limpar parâmetros e variáveis locais da pilha antes de retornar
+
         code.append("RETURN")
         code.append("\n")
         self.symbol_table.go_to_scope(None)
 
-        return
+        return code
     
     def gen_subroutine(self, node):
         _, name, params, body = node
         self.current_scope = name
 
+        pop_count = 0 
         code = []
         func_label = f"SUBROUTINE{name}"
         code.append(func_label + ":")
 
-        count = -1
-        for p in params: # push dos params
-            code.append(f"PUSHL {count}")
-            count -= 1
+        formal_params_count = -len(params)
+        for p in params:
+            pop_count += 1
+            code.append(f"PUSHL {formal_params_count}")
+            formal_params_count += 1
         
         self.symbol_table.go_to_scope(name) # entrar no escopo da subrotina
-        code += self.allocate_vars() # alocar espaço para variáveis locais
+        aloc_code = self.allocate_vars()
+        if aloc_code:
+            pop_count += len(aloc_code)
+            code += aloc_code
 
         code += self.translate_node(body)
 
         self.symbol_table.go_to_scope(None)
+
+        if pop_count > 0:
+            code.append(f"POP {pop_count}") # limpar parâmetros e variáveis locais da pilha antes de retornar
         code.append("RETURN")
         code.append("\n")
 
@@ -191,38 +220,38 @@ class Translator:
         if isinstance(expr, tuple):
             code = self.translate_node(expr)
         else:
-            type = self.symbol_table.get_type(var)
-            if type == 'INTEGER':
+            # caso seja um valor literal ou uma variável, colocamos o valor na pilha
+            if isinstance(expr, bool):
+                code.append(f"PUSHI {1 if expr else 0}")
+            elif isinstance(expr, int):
                 code.append(f"PUSHI {expr}")
-            elif type == 'REAL':
+            elif isinstance(expr, float):
                 code.append(f"PUSHF {expr}")
-            elif type == 'LOGICAL':
-                value = 0
-                if expr is True:
-                    value = 1
-                code.append(f"PUSHI {value}")
-            elif type == 'CHARACTER':
-                code.append(f"PUSHS \"{expr}\"")
-            elif type == 'DOUBLE':
-                code.append(f"PUSHF {expr}")
+            elif isinstance(expr, str):
+                if expr.startswith("'") and expr.endswith("'"):
+                    literal = expr[1:-1].replace('"', '\\"')
+                    code.append(f'PUSHS \"{literal}\"')
+                else:
+                    # caso seja uma variavel
+                    type = self.symbol_table.get_type(var)
+                    idx = self.symbol_table.get_index(expr)
+                    code.append(self.get_push_instruction() + " " + str(idx))
 
         if isinstance(var, tuple) and var[0] == 'INDEX_OR_CALL': # caso seja um acesso a array, tipo NUMS(I)
             _, var_name, index_expr = var
             # 1.1. Colocar o endereço base da struct na pilha
             # Usamos PUSHG ou PUSHL dependendo de onde o ponteiro da struct está guardado
             pos_var = self.symbol_table.get_index(var_name)
-            if self.symbol_table.is_global(var_name):
-                code.append(f"PUSHG {pos_var}")
-            else:
-                code.append(f"PUSHL {pos_var}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {pos_var}") # Agora a pilha tem o endereço base do array
 
             # 1.2. Calcular o índice (I - 1)
-            code
+            code += self.translate_node(index_expr
             code.append("PUSHI 1")
             code.append("SUB") # Topo agora tem o offset (I-1)
 
             # 1.3. Calcular o valor da expressão a ser guardada
-            code.extend(self.translate_node(expr))
+            code += self.translate_node(expr)
 
             # 1.4. Usar STOREN (v, n, a -> a[n] = v)
             # A pilha está: [EndereçoBase, Offset, Valor]
@@ -241,6 +270,7 @@ class Translator:
         elif self.symbol_table.get_current_scope_type() == 'FUNCTION' or self.symbol_table.get_current_scope_type() =='SUBROUTINE':
             code.append(f"STOREL {pos_var}")
         else:    
+            print(self.symbol_table.get_current_scope_type())
             code.append(f"STOREG {pos_var}")
             
         return code
@@ -275,7 +305,8 @@ class Translator:
                 try:
                     idx = self.symbol_table.get_index(arg)
                     var_type = self.symbol_table.get_type(arg)
-                    code.append(f"PUSHG {idx}")
+                    push_inst = self.get_push_instruction()
+                    code.append(f"{push_inst} {idx}")
 
                     if var_type in ("REAL", "DOUBLE"):
                         code.append("WRITEF")
@@ -289,6 +320,8 @@ class Translator:
                     arg = arg.replace('"', '\\"') # Escapar aspas
                     code.append(f'PUSHS "{arg}"')
                     code.append("WRITES")
+                    
+        code.append("WRITELN")
 
         return code
 
@@ -307,7 +340,8 @@ class Translator:
             code.append(f"PUSHF {left}")
         elif isinstance(left, str):
             idx = self.symbol_table.get_index(left)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         # direita
         if isinstance(right, tuple):
@@ -320,7 +354,8 @@ class Translator:
             code.append(f"PUSHF {right}")
         elif isinstance(right, str):
             idx = self.symbol_table.get_index(right)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         # operação
         op_map = {
@@ -346,7 +381,8 @@ class Translator:
             code.append(f"PUSHI {expr}")
         elif isinstance(expr, str):
             idx = self.symbol_table.get_index(expr)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         code.append("PUSHI 0")
         code.append("EQUAL")
@@ -379,7 +415,8 @@ class Translator:
                     idx = self.symbol_table.get_index(name)
                     array_type = self.symbol_table.get_type(name)
                     index_expr = indices[0]
-                    code.append(f"PUSHG {idx}") # base address do array
+                    push_inst = self.get_push_instruction()
+                    code.append(f"{push_inst} {idx}") # Colocar o endereço base do array na pilha
 
                     # Em Fortran os arrays começam em 1, mas na heap vamos usar índice 0, entao NUMS(I) vira endereço NUMS + (I - 1).
                     if isinstance(index_expr, tuple):
@@ -388,7 +425,8 @@ class Translator:
                         code.append(f"PUSHI {index_expr}")
                     elif isinstance(index_expr, str):
                         idx_index = self.symbol_table.get_index(index_expr)
-                        code.append(f"PUSHG {idx_index}")
+                        push_inst = self.get_push_instruction()
+                        code.append(f"{push_inst} {idx_index}")
                     
                     # Converter índice Fortran 1-based para índice 0-based
                     code.append("PUSHI 1")
@@ -402,7 +440,6 @@ class Translator:
                         code.append("ATOF")
 
                     code.append("STOREN") # armazenar na heap. array[index] = valor
-
         return code
 
     def gen_do(self, node): # NAO PERCEBI BEM ESTA
@@ -428,7 +465,8 @@ class Translator:
             code.append(f"PUSHF {start}")
         elif isinstance(start, str):
             idx = self.symbol_table.get_index(start)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         code.append(f"STOREG {var_idx}")
 
@@ -436,7 +474,8 @@ class Translator:
         code.append(f"{start_label}:")
 
         # condiçao do loop
-        code.append(f"PUSHG {var_idx}") # valor atual da variável de controlo
+        push_inst = self.get_push_instruction()
+        code.append(f"{push_inst} {var_idx}") # colocar valor atual da variável de controlo do loop na pilha
         if isinstance(end, tuple):
             code.extend(self.translate_node(end))
         elif isinstance(end, int):
@@ -445,7 +484,8 @@ class Translator:
             code.append(f"PUSHF {end}")
         elif isinstance(end, str):
             idx = self.symbol_table.get_index(end)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         code.append("INFEQ") # condição de saída: var > end
 
@@ -479,14 +519,16 @@ class Translator:
             end_label = do_info['end_label']
 
             # Incrementar a variável: var = var + step
-            code.append(f"PUSHG {var_idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {var_idx}") 
             if isinstance(step, int):
                 code.append(f"PUSHI {step}")
             elif isinstance(step, float):
                 code.append(f"PUSHF {step}")
             else: # Se for variável
                 s_idx = self.symbol_table.get_index(step)
-                code.append(f"PUSHG {s_idx}")
+                push_inst = self.get_push_instruction()
+                code.append(f"{push_inst} {s_idx}")
             
             code.append("ADD")
             code.append(f"STOREG {var_idx}")
@@ -504,7 +546,8 @@ class Translator:
 
     def gen_goto(self, node):
         _, label = node
-        return f"JUMP global{label}"
+        scope_name = self.symbol_table.get_current_scope_name()
+        return f"JUMP {scope_name}{label}"
        
     def gen_if(self, node):
         _, cond, then_body, else_body = node
@@ -523,7 +566,8 @@ class Translator:
             code.append(f"PUSHI {cond}")
         elif isinstance(cond, str):
             idx = self.symbol_table.get_index(cond)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         code.append(f"JZ {else_label if else_body else end_label}")
 
@@ -561,9 +605,10 @@ class Translator:
                     code.append(f'PUSHS "{literal}"')
                 else:
                     idx = self.symbol_table.get_index(arg)
-                    code.append(f"PUSHG {idx}")
+                    push_inst = self.get_push_instruction()
+                    code.append(f"{push_inst} {idx}")
 
-        code.append(f"PUSHA SUBROUTINE_{name}")
+        code.append(f"PUSHA SUBROUTINE{name}")
         code.append("CALL")
         return code
 
@@ -599,7 +644,8 @@ class Translator:
                 else:
                     idx = self.symbol_table.get_index(arg)
                     var_type = self.symbol_table.get_type(arg)
-                    code.append(f"PUSHG {idx}")
+                    push_inst = self.get_push_instruction()
+                    code.append(f"{push_inst} {idx}")
                     if var_type in ("REAL", "DOUBLE"):
                         code.append("WRITEF")
                     elif var_type == "CHARACTER":
@@ -632,7 +678,8 @@ class Translator:
                 code.append(f'PUSHS "{literal}"')
             else:
                 idx = self.symbol_table.get_index(left)
-                code.append(f"PUSHG {idx}")
+                push_inst = self.get_push_instruction()
+                code.append(f"{push_inst} {idx}")
 
         if isinstance(right, tuple):
             right_code = self.translate_node(right)
@@ -650,7 +697,8 @@ class Translator:
                 code.append(f'PUSHS "{literal}"')
             else:
                 idx = self.symbol_table.get_index(right)
-                code.append(f"PUSHG {idx}")
+                push_inst = self.get_push_instruction()
+                code.append(f"{push_inst} {idx}")
 
         op_map = {
             'LT': 'INF',
@@ -678,7 +726,8 @@ class Translator:
             code.append(f"PUSHI {1 if left else 0}")
         elif isinstance(left, str):
             idx = self.symbol_table.get_index(left)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         if isinstance(right, tuple):
             code.extend(self.translate_node(right))
@@ -686,7 +735,8 @@ class Translator:
             code.append(f"PUSHI {1 if right else 0}")
         elif isinstance(right, str):
             idx = self.symbol_table.get_index(right)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
         if op == 'AND':
             code.append("MUL")
@@ -733,7 +783,8 @@ class Translator:
 
         if self.symbol_table.is_array(name):
             idx = self.symbol_table.get_index(name)
-            code.append(f"PUSHG {idx}")
+            push_inst = self.get_push_instruction()
+            code.append(f"{push_inst} {idx}")
 
             index_expr = args[0]
             if isinstance(index_expr, tuple):
@@ -742,13 +793,18 @@ class Translator:
                 code.append(f"PUSHI {index_expr}")
             elif isinstance(index_expr, str):
                 idx_i = self.symbol_table.get_index(index_expr)
-                code.append(f"PUSHG {idx_i}")
+                push_inst = self.get_push_instruction()
+                code.append(f"{push_inst} {idx_i}")
 
             code.append("PUSHI 1")
             code.append("SUB")
             code.append("LOADN")
 
         else:
+            count_args = 0
+            #alocar espaço para o retorno da função
+            code.append("PUSHI 0")
+
             for arg in args:
                 if isinstance(arg, tuple):
                     code.extend(self.translate_node(arg))
@@ -764,10 +820,15 @@ class Translator:
                         code.append(f'PUSHS "{literal}"')
                     else:
                         idx = self.symbol_table.get_index(arg)
-                        code.append(f"PUSHG {idx}")
+                        push_inst = self.get_push_instruction()
+                        code.append(f"{push_inst} {idx}")
+                count_args += 1
 
-            code.append(f"PUSHA FUNC_{name}")
+            code.append(f"PUSHA FUNC{name}")
             code.append("CALL")
+            #pop dos args
+            if count_args > 0:
+                code.append(f"POP {count_args}")
 
         return code
     
@@ -838,7 +899,8 @@ class Translator:
                     idx = self.symbol_table.get_index(arg)
                     var_type = self.symbol_table.get_type(arg)
 
-                    code.append(f"PUSHG {idx}")
+                    push_inst = self.get_push_instruction()
+                    code.append(f"{push_inst} {idx}")
 
                     if var_type in ("REAL", "DOUBLE"):
                         code.append("WRITEF")

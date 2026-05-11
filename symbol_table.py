@@ -9,15 +9,18 @@ class SymbolTable:
     
     def __init__(self):
         self.__table = {}
+        self.__current_scope = 'GLOBAL'
         self.__all_scopes = {
                 'GLOBAL': {
                     'name': 'GLOBAL',
                     'vars': self.__table,
                     'prev': None,
-                    'type': 'PROGRAM'
+                    'type': 'PROGRAM',
+                    'return_address': None
                 }
             }
         self.__scope_stack = ['GLOBAL'] # stack dos nomes dos scopes
+        self.__current_scope = 'GLOBAL'
         self.calls_to_verify = [] # para guardar as chamadas de funções/subrotinas que não estão na symbol table no momento da análise semântica, para verificar no final se estão declaradas
                                     # (node, symbol_table_entry)
         self.gotos_to_verify = [] # para guardar os GOTO targets que não estão na symbol table no momento da análise semântica, para verificar no final se estão declarados
@@ -171,6 +174,12 @@ class SymbolTable:
         if name not in self.__table:
             raise SemanticError(f"Symbol '{name}' not declared.")
         return self.__table[name]['is_return_value']
+    
+    def set_return_address(self, scope_name, address):
+        """Set the return address for a scope's return value."""
+        if scope_name not in self.__all_scopes:
+            raise SemanticError(f"Scope '{scope_name}' not found.")
+        self.__all_scopes[scope_name]['return_address'] = address
 
     def get_size(self, name):
         """Get the size of an array variable."""
@@ -314,6 +323,7 @@ class SymbolTable:
         }
         self.__all_scopes[scope_name] = new_scope
         self.__scope_stack.append(scope_name)
+        self.__current_scope = scope_name
 
     def pop_scope(self):
         """Go to previous scope."""
@@ -325,6 +335,7 @@ class SymbolTable:
 
 
             self.__scope_stack.pop()
+            self.__current_scope = self.__scope_stack[-1]
             self.__table = self.__all_scopes[self.__scope_stack[-1]]['vars']
             return True
         return False
@@ -337,28 +348,25 @@ class SymbolTable:
 
     def set_scope_return_type(self, return_type):
         """Set the return type for the current scope (used for functions)."""
-        current_scope = self.__scope_stack[-1]
-        self.__all_scopes[current_scope]['return_type'] = return_type
+        self.__all_scopes[self.__current_scope]['return_type'] = return_type
     
     def set_scope_return_address(self, address):
         """Set the return address for the current scope (used for function return values)."""
-        current_scope = self.__scope_stack[-1]
-        self.__all_scopes[current_scope]['return_address'] = address
+        self.__all_scopes[self.__current_scope]['return_address'] = address
     
     def is_return_value_assigned(self):
         """Check if the return value of the current function scope has been assigned."""
         if self.get_current_scope_type() not in ['FUNCTION']:
             return True # não precisa de return value
-        current_scope = self.__scope_stack[-1]
-        return self.__all_scopes[current_scope]['return_value_assigned']
+        return self.__all_scopes[self.__current_scope]['return_value_assigned']
 
     def get_current_scope_name(self):
         """Get the name of the current scope."""
-        return self.__scope_stack[-1]
+        return self.__current_scope
     
     def get_current_scope_type(self):
         """Get the type of the current scope."""
-        return self.__all_scopes[self.__scope_stack[-1]]['type']
+        return self.__all_scopes[self.__current_scope]['type']
         
     # para declarar no inicio do scope em codigo maquina
     def get_table(self, scope_name):
@@ -594,6 +602,7 @@ class SymbolTable:
             scope_name = 'GLOBAL'
         if scope_name not in self.__all_scopes:
             raise SemanticError(f"Scope '{scope_name}' not found.")
+        self.__current_scope = scope_name
         self.__table = self.__all_scopes[scope_name]['vars']
                 
             

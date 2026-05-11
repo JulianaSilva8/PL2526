@@ -14,8 +14,11 @@ def main(args):
         ast, symbol_table = get_ast(data, lexer)
         translator = Translator(symbol_table)
         code = translator.translate(ast)
-        for line in code:
-            print(line)
+        
+        with open('output.txt', "w") as f:
+            for line in code:
+                f.write(line + "\n")
+
     except (LexError, ParseError, SemanticError, SemanticWarning) as e:
         print(f"Erro: {e}")
     
