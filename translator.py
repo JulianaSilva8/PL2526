@@ -57,7 +57,7 @@ class Translator:
             return self.gen_continue(node)
         elif op == 'PRINT':
             return self.gen_print(node)
-        elif op in ('ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'POW'):
+        elif op in ('ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'POWER'):
             return self.gen_arithmetic(node, op)
         elif op in ('LT', 'GT', 'LE', 'GE', 'EQ', 'NE'):        #   SOFIA
             return self.gen_relational(node)
@@ -75,7 +75,6 @@ class Translator:
         return ["// Unhandled node: " + str(op)]
 
     def allocate_vars(self):
-        table = self.symbol_table.get_table()
         code = []
         vars = self.symbol_table.get_table()
         for name, value in vars.items():
@@ -84,13 +83,13 @@ class Translator:
             
             if value['is_array']:
                 size = value['size']
-                code.append(f"ALLOC {size}") # ver!!!!!!!!
+                code.append(f"PUSHN {size}") # para reservar as N posiçoes
             else:
                 if value['type'] == 'INTEGER':
                     code.append("PUSHI 0")
                 elif value['type'] == 'REAL':
                     code.append("PUSHF 0.0")
-                elif value['type'] == 'BOOL':
+                elif value['type'] == 'LOGICAL':
                     code.append("PUSHI 0")
                 elif value['type'] == 'CHARACTER':
                     code.append("PUSHS \"\"")
@@ -176,7 +175,7 @@ class Translator:
                     code.append(f"PUSHI {expr}")
                 elif type == 'REAL':
                     code.append(f"PUSHF {expr}")
-                elif type == 'BOOL':
+                elif type == 'LOGICAL':
                     value = 0
                     if expr is True:
                         value = 1
@@ -236,6 +235,7 @@ class Translator:
                     else: # INTEGER, BOOL
                         code.append("WRITEI")
                 except Exception:
+                    arg = arg[1:-1] # porque vem com aspas do parser
                     # Se nao existir na symbol table, tratamos como string literal
                     arg = arg.replace('"', '\\"') # Escapar aspas
                     code.append(f'PUSHS "{arg}"')
@@ -286,7 +286,7 @@ class Translator:
             'MUL': 'MUL',
             'DIV': 'DIV',
             'MOD': 'MOD',
-            'POW': 'POW'
+            'POWER': 'POW'
         }
         code.append(op_map[instr])
         return "\n".join(code)
@@ -784,3 +784,75 @@ class Translator:
         code.append("CONCAT")
         return code
     
+    def gen_write(self, node):
+        _, control_spec, args = node
+        code = []
+
+        # WRITE(*,*) sem argumentos -> linha vazia
+        if not args:
+            code.append('PUSHS "\\n"')
+            code.append("WRITES")
+            return "\n".join(code)
+
+        for arg in args:
+            if isinstance(arg, bool):
+                if arg:
+                    code.append('PUSHS ".TRUE."')
+                else:
+                    code.append('PUSHS ".FALSE."')
+                code.append("WRITES")
+
+            elif isinstance(arg, int):
+                code.append(f"PUSHI {arg}")
+                code.append("WRITEI")
+
+            elif isinstance(arg, float):
+                code.append(f"PUSHF {arg}")
+                code.append("WRITEF")
+
+            elif isinstance(arg, str):
+                try:
+                    # Se existir na symbol table, é variável
+                    idx = self.symbol_table.get_index(arg)
+                    var_type = self.symbol_table.get_type(arg)
+
+                    code.append(f"PUSHG {idx}")
+
+                    if var_type in ("REAL", "DOUBLE"):
+                        code.append("WRITEF")
+                    elif var_type == "CHARACTER":
+                        code.append("WRITES")
+                    elif var_type == "LOGICAL":
+                        # Simples: escreve 0/1, tal como tens noutros pontos
+                        code.append("WRITEI")
+                    else:
+                        code.append("WRITEI")
+
+                except Exception:
+                    # Se não existir na symbol table, é string literal vinda do parser
+                    # Exemplo: "'IGUAL'" -> "IGUAL"
+                    if len(arg) >= 2 and arg[0] == "'" and arg[-1] == "'":
+                        arg = arg[1:-1]
+
+                    arg = arg.replace('"', '\\"')
+                    code.append(f'PUSHS "{arg}"')
+                    code.append("WRITES")
+
+            elif isinstance(arg, tuple):
+                arg_code = self.translate(arg)
+                if arg_code:
+                    code.extend(arg_code.splitlines())
+
+                expr_type = self.symbol_table.get_expr_type(arg)
+
+                if expr_type in ("REAL", "DOUBLE"):
+                    code.append("WRITEF")
+                elif expr_type in ("CHARACTER", "STRING"):
+                    code.append("WRITES")
+                else:
+                    code.append("WRITEI")
+
+        code.append('PUSHS "\\n"')
+        code.append("WRITES")
+
+        return "\n".join(code)

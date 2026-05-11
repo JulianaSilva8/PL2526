@@ -45,11 +45,17 @@ class SymbolTable:
         """
         existing_symbol = self.__table.get(name)
         if existing_symbol is not None:
+            
+            if existing_symbol['is_formal_param'] and existing_symbol['type'] is None:
+                existing_symbol['type'] = var_type
+                if is_array: existing_symbol['is_array'] = is_array
+                if size: existing_symbol['size'] = size
+                if char_len: existing_symbol['char_len'] = char_len
+                existing_symbol['initialized'] = True # parâmetros formais são considerados inicializados para permitir atribuição de outros parâmetros a eles
+                return # Exit successfully
             if existing_symbol['is_label'] and is_label:
                 raise SemanticError(f"Duplicate label: {name}")
-            if existing_symbol['is_formal_param'] and existing_symbol['type'] is None and var_type is not None: # tipo de parametros é assigned na declaração
-                existing_symbol['type'] = var_type
-
+            
             raise SemanticError(f"Duplicate declaration: {name}")
         
         if self.get_current_scope_type() == 'FUNCTION' and name == self.get_current_scope_name() and not is_return_value:
@@ -88,7 +94,7 @@ class SymbolTable:
             
         if name not in self.__table:
             if self.get_current_scope_type() == 'FUNCTION' and name == self.get_current_scope_name():
-                self.declare(name, var_type=self.get_current_scope_return_type(), is_return_value=True)
+                self.declare(name, var_type=self.get_current_scope_type(), is_return_value=True)
                 scope_name = self.get_current_scope_name() 
                 self.__all_scopes[scope_name]['return_value_assigned'] = True # marcar que o return value já foi atribuído em algum ponto do código 
             else:
@@ -97,11 +103,12 @@ class SymbolTable:
         self.check_parameter_assignment(name)
         if self.__table[name]['is_label']:
             raise SemanticError(name + " isn't a variable.")
-        
         value_type = self.get_expr_type(value)
         var_type = self.__table[name]['type']
-        if not self.is_type_compatible(value_type, var_type):
+        if not self.is_type_compatible(value_type, var_type) and not self.get_current_scope_type() == 'FUNCTION':
             raise SemanticError(f"Type mismatch: cannot assign value of type {value_type} to variable '{name}' of type {var_type}.")
+        if self.get_current_scope_type() == 'FUNCTION' and name == self.get_current_scope_name() and not self.is_type_compatible(value_type, self.get_return_type(self.get_current_scope_name())):
+            raise SemanticError(f"Type mismatch: cannot assign value of type {value_type} to return variable '{name}' of type {self.get_return_type(self.get_current_scope_name())}.")
         
         self.initialize(name) # marcar a variável como inicializada e verificar se foi declarada
 
@@ -116,7 +123,7 @@ class SymbolTable:
             return True
         elif type1 == 'LOGICAL' and type2 == 'LOGICAL':
             return True
-        elif type1 == 'CHARACTER' and type2 in ['CHARACTER', 'STRING']:
+        elif type1 in ['CHARACTER', 'STRING'] and type2 == 'CHARACTER':
             return True
         elif type1 == 'DOUBLE' and type2 in ['DOUBLE', 'REAL', 'INTEGER']:
             return True
@@ -171,9 +178,11 @@ class SymbolTable:
             if node[0] == '\'' and node[-1] == '\'':
                 if len(node) == 3:
                     return 'CHARACTER'
-                else: return 'STRING'
+                else: 
+                    return 'STRING'
 
-            # senão é string ou char é var           
+            # senão é string ou char é var       
+              
             if node not in self.__table or self.__table[node]['initialized'] == False:
                 raise SemanticError(f"Undeclared or uninitialized variable: '{node}'.")
             if self.__table[node]['type'] is None:
@@ -198,9 +207,10 @@ class SymbolTable:
                     if self.get_scope_type(name):
                         self.check_is_function(name)
                         self.check_call_args(name, [self.get_expr_type(arg) for arg in node[2]])
+                        return self.get_return_type(name)
                 # senão, tem de se fazer essa verificação no final -> guardar no calls to verify
-                    self.calls_to_verify.append((node, self.__table[name]))
-                    return self.get_return_type(name)
+                    self.calls_to_verify.append((node, self.get_current_scope_name()))
+                    return 'INTEGER' # tipo genérico para permitir a análise semântica continuar, a verificação real do tipo é feita no final da análise semântica
             else:
                 raise SemanticError(f"Symbol '{name}' not declared.")
 
@@ -227,6 +237,13 @@ class SymbolTable:
                 return 'LOGICAL'
             else:
                 raise SemanticError(f"Operação {op} inválida entre {t1} e {t2}")
+            
+        if op == 'NOT':
+            t = self.get_expr_type(node[1])
+            if t == 'LOGICAL':
+                return 'LOGICAL'
+            else:
+                raise SemanticError(f"Operação NOT inválida sobre {t}")
         
         if op == 'CONCAT':
             t1 = self.get_expr_type(node[1])
@@ -304,7 +321,7 @@ class SymbolTable:
     def get_scope_type(self, scope_name):
         """Get the type of a scope (PROGRAM, FUNCTION, SUBROUTINE)."""
         if scope_name not in self.__all_scopes:
-            raise SemanticError(f"Scope '{scope_name}' not found.")
+            raise SemanticError(f"Scope '{scope_name}' not found. (1)")
         return self.__all_scopes[scope_name]['type']
 
     def set_scope_return_type(self, return_type):
@@ -336,19 +353,19 @@ class SymbolTable:
     def get_table(self, scope_name):
         """Get the symbol table for a specific scope."""
         if scope_name not in self.__all_scopes:
-            raise SemanticError(f"Scope '{scope_name}' not found.")
+            raise SemanticError(f"Scope '{scope_name}' not found (2).")
         return self.__all_scopes[scope_name]['vars']
     
     def get_return_type(self, scope_name):
         """Get the return type of a function."""
         if scope_name not in self.__all_scopes:
-            raise SemanticError(f"Scope '{scope_name}' not found.")
+            raise SemanticError(f"Scope '{scope_name}' not found (3).")
         return self.__all_scopes[scope_name]['return_type']
     
     def get_return_address(self, scope_name):
         """Get the return address for a function's return value."""
         if scope_name not in self.__all_scopes:
-            raise SemanticError(f"Scope '{scope_name}' not found.")
+            raise SemanticError(f"Scope '{scope_name}' not found (4).")
         return self.__all_scopes[scope_name]['return_address']
         
     def check_array_access(self, name, index= None):
@@ -521,31 +538,44 @@ class SymbolTable:
             raise SemanticError("DO loop step cannot be zero.")
         
     def verify_pending_calls(self):
-        """Verificar no final da análise semântica se as chamadas de funções/subrotinas guardadas são válidas."""
+        """Verificar no final se as chamadas guardadas são válidas, mudando de scope se necessário."""
         errors = []
         
-        for node, _ in self.calls_to_verify:
-            name = node[1]
+        # Salvar o scope original (geralmente 'global') para restaurar no fim
+        original_scope_name = self.__scope_stack[-1]
+
+        for node, scope_name in self.calls_to_verify:
+            name = node[1] # 'CONVRT'
+            args = node[2] # ['NUM', 'BASE']
+            
+            # 1. Mudar temporariamente a tabela para o scope onde a chamada ocorreu
+            # Isto faz com que get_expr_type encontre 'NUM' e 'BASE'
+            if scope_name in self.__all_scopes:
+                self.__table = self.__all_scopes[scope_name]['vars']
+            
+            # 2. Verificar se a função existe na globalidade do programa
             if name not in self.__all_scopes:
                 errors.append(f"Undefined function/subroutine: '{name}'.")
                 continue
             
-            args = node[2]
-            args_types = [self.get_expr_type(arg) for arg in args]
             try:
+                # 3. Resolver os tipos dos argumentos usando a tabela do scope da chamada
+                args_types = [self.get_expr_type(arg) for arg in args]
+                
+                # 4. Validar se é função/subrotina e se os argumentos batem
                 if node[0] == 'INDEX_OR_CALL':
                     self.check_is_function(name)
                 elif node[0] == 'CALL':
                     self.check_is_subroutine(name)
-            except SemanticError as e:
-                errors.append(str(e))
-                continue
-            
-            try:
+                    
                 self.check_call_args(name, args_types)
+                
             except SemanticError as e:
                 errors.append(str(e))
-            
+                
+        # Restaurar a tabela para o scope original
+        self.__table = self.__all_scopes[original_scope_name]['vars']
+        
         if errors:
             raise SemanticError("\n".join(errors))
         
@@ -558,3 +588,4 @@ class SymbolTable:
                 
             
         
+            raise SemanticError("\n".join(errors))    
