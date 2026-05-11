@@ -548,6 +548,13 @@ class SymbolTable:
             
         if errors:
             raise SemanticError("\n".join(errors))
+        
+    def go_to_scope(self, scope_name):
+        if scope_name is None:
+            scope_name = 'global'
+        if scope_name not in self.__all_scopes:
+            raise SemanticError(f"Scope '{scope_name}' not found.")
+        self.__table = self.__all_scopes[scope_name]['vars']
                 
             
         
