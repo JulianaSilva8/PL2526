@@ -3,7 +3,7 @@ import sys
 from ply import lex, yacc
 from lexer import lexer, tokens
 from symbol_table import SymbolTable
-from errors import ParseError, SemanticError
+from errors import ParseError, SemanticError, SemanticWarning, LexError
 
 
 def p_declaration(p):
@@ -11,18 +11,24 @@ def p_declaration(p):
     Declaration : Type VarList
     """
     type_name = p[1]
+    is_string = False
 
     if isinstance(type_name, tuple):
-        type_name, char_len = type_name
+        type_name, size = type_name
+        is_string = True
     else:
         type_name = type_name
-        char_len = None
     for var in p[2]:
         if isinstance(var, tuple):  # array decl
+            if is_string:
+                raise SemanticError("Wrong declaration for CHARACTER variable. Size not specified correctly.")
             var_name, size = var
-            parser.symbol_table.declare(var_name, var_type=type_name, is_array=True, size=size, char_len=char_len)
+            parser.symbol_table.declare(var_name, var_type=type_name, is_array=True, size=size)
         else:  # regular variable declaration
-            parser.symbol_table.declare(var, var_type=type_name, char_len=char_len)
+            if is_string:
+                parser.symbol_table.declare(var, var_type=type_name, is_array=True, size=size) # para CHARACTER * n, declarar como array de caracteres
+            else:
+                parser.symbol_table.declare(var, var_type=type_name)
     p[0] = ('DECLARE', type_name) # ignorado na translating phase 
 
 
@@ -461,31 +467,31 @@ def p_read_statement(p):
             parser.symbol_table.initialize(array_name) # para garantir que o array foi declarado e inicializado antes de ser lido
     p[0] = ('READ', p[2], p[4])
 
-def p_write_statement(p):
-    r"""
-    WriteStatement : WRITE "(" ControlPair ")" ArgList
-                   | WRITE "(" ControlPair ")"
-    """
-    control_spec = p[3]
-    args = p[5] if len(p) == 6 else []
+# def p_write_statement(p):
+#     r"""
+#     WriteStatement : WRITE "(" ControlPair ")" ArgList
+#                    | WRITE "(" ControlPair ")"
+#     """
+#     control_spec = p[3]
+#     args = p[5] if len(p) == 6 else []
 
-    p[0] = ('WRITE', control_spec, args)
-
-
-def p_control_pair(p):
-    r"""
-    ControlPair : WriteUnit "," Format
-    """
-    p[0] = (p[1], p[3])
+#     p[0] = ('WRITE', control_spec, args)
 
 
-def p_write_unit(p):
-    r"""
-    WriteUnit : "*"
-              | INT
-              | VAR
-    """
-    p[0] = p[1]
+# def p_control_pair(p):
+#     r"""
+#     ControlPair : WriteUnit "," Format
+#     """
+#     p[0] = (p[1], p[3])
+
+
+# def p_write_unit(p):
+#     r"""
+#     WriteUnit : "*"
+#               | INT
+#               | VAR
+#     """
+#     p[0] = p[1]
 
 def p_format(p):
     r"""
@@ -506,6 +512,19 @@ def p_assignment(p): # ver caso de var ser acesso ao array
 
     p[0] = ('ASSIGN', p[1], p[3])
 
+def p_assignment_array(p):
+    r"""
+    Assignment : IndexOrCall EQUALS Expression
+    """
+    array_name = p[1][1]  # p[1] is ('INDEX_OR_CALL', array_name, index)
+    index = p[1][2]
+    if len(index) != 1:
+        raise SemanticError("Only one index is supported for array access.")
+    value = p[3]
+
+    parser.symbol_table.set_value(array_name, value, index[0])
+
+    p[0] = ('ASSIGN', array_name, index[0], p[3])
 
 def p_program_header(p):
     r"""
@@ -565,7 +584,6 @@ def p_statement_content(p):
                         | GotoStatement
                         | PrintStatement
                         | ReadStatement
-                        | WriteStatement
                         | ParameterStatement
                         | Continue
                         | StopStatement
@@ -598,6 +616,17 @@ parser = yacc.yacc(start="ProgramUnitList", write_tables=False)
 parser.symbol_table = SymbolTable()
 parser.quit = False
 
+def get_ast(data, lexer):
+    try:
+        ast = parser.parse(data, lexer=lexer)
+
+        parser.symbol_table.verify_pending_gotos()
+        parser.symbol_table.verify_pending_calls()
+
+        return ast, parser.symbol_table
+    except Exception as e:
+        print(e)
+        return None
 
 def main(args):
     with open(args[1], "r") as f:

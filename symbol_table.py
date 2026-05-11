@@ -38,7 +38,7 @@ class SymbolTable:
             raise SemanticError(f"Undeclared variable: {name}")
         return self.__table[name]
 
-    def declare(self, name, var_type=None, is_array=False, size=None, is_parameter=False, is_formal_param=False, value=None, is_label=False, is_return_value=False, char_len=None):
+    def declare(self, name, var_type=None, is_array=False, size=None, is_parameter=False, is_formal_param=False, value=None, is_label=False, is_return_value=False):
         """
         Declare a new identifier with optional type and array information.
         Raises SemanticError if variable is already declared.
@@ -50,7 +50,6 @@ class SymbolTable:
                 existing_symbol['type'] = var_type
                 if is_array: existing_symbol['is_array'] = is_array
                 if size: existing_symbol['size'] = size
-                if char_len: existing_symbol['char_len'] = char_len
                 existing_symbol['initialized'] = True # parâmetros formais são considerados inicializados para permitir atribuição de outros parâmetros a eles
                 return # Exit successfully
             if existing_symbol['is_label'] and is_label:
@@ -68,7 +67,6 @@ class SymbolTable:
             'initialized': False,
             'is_array': is_array,
             'size': size,
-            'char_len': char_len, # para variáveis CHARACTER - comprimento declarado
             'is_parameter': is_parameter,
             'is_formal_param': is_formal_param, # params na declaração de funcoes
             'is_return_value': is_return_value, # for functions
@@ -90,7 +88,7 @@ class SymbolTable:
             raise SemanticError(f"Undeclared variable: {name}")
         self.__table[name]['initialized'] = True
 
-    def set_value(self, name, value): # value é um node
+    def set_value(self, name, value, index=None):
             
         if name not in self.__table:
             if self.get_current_scope_type() == 'FUNCTION' and name == self.get_current_scope_name():
@@ -103,6 +101,19 @@ class SymbolTable:
         self.check_parameter_assignment(name)
         if self.__table[name]['is_label']:
             raise SemanticError(name + " isn't a variable.")
+        
+        if self.__table[name]['is_array']:
+            if index is None:
+                raise SemanticError(f"Must provide an index to assign a value to array variable '{name}'.")
+            if not isinstance(index, int):
+                # caso seja uma expressão verifica só o tipo
+                index_type = self.get_expr_type(index)
+                if index_type != 'INTEGER':
+                    raise SemanticError(f"Array index for variable '{name}' must be of type INTEGER, got {index_type}.")
+            else:
+                #senão verifica se o index é válido para o tamanho do array
+                self.check_array_access(name, index)
+
         value_type = self.get_expr_type(value)
         var_type = self.__table[name]['type']
         if not self.is_type_compatible(value_type, var_type) and not self.get_current_scope_type() == 'FUNCTION':
@@ -467,7 +478,6 @@ class SymbolTable:
             'initialized': True,
             'is_array': False,
             'size': None,
-            'char_len': None,
             'is_parameter': False,
             'is_formal_param': False,
             'is_return_value': False,
@@ -588,4 +598,3 @@ class SymbolTable:
                 
             
         
-            raise SemanticError("\n".join(errors))    

@@ -9,3 +9,6 @@ class SemanticError(Exception):
 class SemanticWarning(Warning):
     """Semantic warnings raised by semantic analysis and symbol table."""
     pass
+
+class LexError(Exception):
+    pass

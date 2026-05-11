@@ -1,5 +1,6 @@
 import ply.lex as lex
 import sys
+from errors import LexError
 
 reserved = {
     "PROGRAM": "PROGRAM",
@@ -113,8 +114,7 @@ t_ignore = " \t"
 
 literals = "(),*'"
 
-class LexError(Exception):
-    pass
+
     
 def t_error(t): 
     raise LexError(f"Illegal character '{t.value[0]}' at line {t.lexer.lineno}")
