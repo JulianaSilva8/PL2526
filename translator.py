@@ -103,12 +103,12 @@ class Translator:
     def gen_program(self, node):
         _, name, body = node
         code = []
-        self.symbol_table.push_scope() # scope do programa
+        self.symbol_table.go_to_scope(name) # entrar no escopo do programa
         code.append(self.allocate_vars()) # alocar espaço para variáveis globais
         code.append(self.translate(body))
-        self.symbol_table.pop_scope(name) # idealmente o nome já estaria preenchido na analise semantica
-
+        self.symbol_table.go_to_scope(None) # voltar para escopo global
         code.append("STOP") # para não executar codigo das funções/subrotinas
+        code.append("/n")
         return code
     
     def gen_function(self, node):
@@ -124,13 +124,14 @@ class Translator:
             code.append(f"PUSHL {count}")
             count -= 1
         
-        self.symbol_table.push_scope() # scope da função
+        self.symbol_table.go_to_scope(name) # entrar no escopo da função
         code.append(self.allocate_vars()) # alocar espaço para variáveis locais
 
         code.append(self.translate(body))
         code.append("RETURN")
-        
-        self.symbol_table.pop_scope(name, type) # idealmente o nome e o tipo já estariam preenchidos na analise semantica
+        code.append("/n")
+        self.symbol_table.go_to_scope(None)
+
         return
     
     def gen_subroutine(self, node):
