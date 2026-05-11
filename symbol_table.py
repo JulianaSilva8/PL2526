@@ -10,14 +10,14 @@ class SymbolTable:
     def __init__(self):
         self.__table = {}
         self.__all_scopes = {
-                'global': {
-                    'name': 'global',
+                'GLOBAL': {
+                    'name': 'GLOBAL',
                     'vars': self.__table,
                     'prev': None,
                     'type': 'PROGRAM'
                 }
             }
-        self.__scope_stack = ['global'] # stack dos nomes dos scopes
+        self.__scope_stack = ['GLOBAL'] # stack dos nomes dos scopes
         self.calls_to_verify = [] # para guardar as chamadas de funções/subrotinas que não estão na symbol table no momento da análise semântica, para verificar no final se estão declaradas
                                     # (node, symbol_table_entry)
         self.gotos_to_verify = [] # para guardar os GOTO targets que não estão na symbol table no momento da análise semântica, para verificar no final se estão declarados
@@ -551,7 +551,7 @@ class SymbolTable:
         """Verificar no final se as chamadas guardadas são válidas, mudando de scope se necessário."""
         errors = []
         
-        # Salvar o scope original (geralmente 'global') para restaurar no fim
+        # Salvar o scope original (geralmente 'GLOBAL') para restaurar no fim
         original_scope_name = self.__scope_stack[-1]
 
         for node, scope_name in self.calls_to_verify:
@@ -591,7 +591,7 @@ class SymbolTable:
         
     def go_to_scope(self, scope_name):
         if scope_name is None:
-            scope_name = 'global'
+            scope_name = 'GLOBAL'
         if scope_name not in self.__all_scopes:
             raise SemanticError(f"Scope '{scope_name}' not found.")
         self.__table = self.__all_scopes[scope_name]['vars']

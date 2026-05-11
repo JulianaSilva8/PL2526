@@ -96,8 +96,13 @@ class Translator:
                 continue # já inicializados
             
             if value['is_array']:
-                size = value['size']
-                code.append(f"PUSHN {size}") # para reservar as N posiçoes
+                # TO DO: ver casos em que size é uma expressao/variavel
+                if value['type'] == 'CHARACTER':
+                    #to do
+                    pass
+                else:
+                    size = value['size']
+                    code.append(f"ALLOC {size}")
             else:
                 if value['type'] == 'INTEGER':
                     code.append("PUSHI 0")
@@ -109,6 +114,7 @@ class Translator:
                     code.append("PUSHS \"\"")
                 elif value['type'] == 'DOUBLE':
                     code.append("PUSHF 0.0")
+        print(code)
 
         return code
 
@@ -292,9 +298,7 @@ class Translator:
         code = []
         # esquerda
         if isinstance(left, tuple):
-            left_code = self.translate_node(left)
-            if left_code:
-                code.extend(left_code.splitlines())
+            code.extend(self.translate_node(left))
         elif isinstance(left, bool):
             code.append(f"PUSHI {1 if left else 0}")
         elif isinstance(left, int):
@@ -307,9 +311,7 @@ class Translator:
 
         # direita
         if isinstance(right, tuple):
-            right_code = self.translate_node(right)
-            if right_code:
-                code.extend(right_code.splitlines())
+            code.extend(self.translate_node(right))
         elif isinstance(right, bool):
             code.append(f"PUSHI {1 if right else 0}")
         elif isinstance(right, int):
@@ -337,9 +339,7 @@ class Translator:
         code = []
 
         if isinstance(expr, tuple): # 
-            expr_code = self.translate_node(expr)
-            if expr_code:
-                code.extend(expr_code.splitlines())
+            code.extend(self.translate_node(expr))
         elif isinstance(expr, bool):
             code.append(f"PUSHI {1 if expr else 0}")
         elif isinstance(expr, int):
@@ -383,9 +383,7 @@ class Translator:
 
                     # Em Fortran os arrays começam em 1, mas na heap vamos usar índice 0, entao NUMS(I) vira endereço NUMS + (I - 1).
                     if isinstance(index_expr, tuple):
-                        index_code = self.translate_node(index_expr)
-                        if index_code:
-                            code.extend(index_code.splitlines())
+                        code.extend(self.translate_node(index_expr))
                     elif isinstance(index_expr, int):
                         code.append(f"PUSHI {index_expr}")
                     elif isinstance(index_expr, str):
@@ -423,9 +421,7 @@ class Translator:
 
         # inicializar a var do loop
         if isinstance(start, tuple):
-            start_code = self.translate_node(start)
-            if start_code:
-                code.extend(start_code.splitlines())
+            code.extend(self.translate_node(start))
         elif isinstance(start, int):
             code.append(f"PUSHI {start}")
         elif isinstance(start, float):
@@ -442,9 +438,7 @@ class Translator:
         # condiçao do loop
         code.append(f"PUSHG {var_idx}") # valor atual da variável de controlo
         if isinstance(end, tuple):
-            end_code = self.translate_node(end)
-            if end_code:
-                code.extend(end_code.splitlines())
+            code.extend(self.translate_node(end))
         elif isinstance(end, int):
             code.append(f"PUSHI {end}")
         elif isinstance(end, float):
@@ -467,12 +461,50 @@ class Translator:
         }
         return code
     
-    def gen_continue(self, node): # acho que é assim por causa do DO
-        pass
+    def gen_continue(self, node):
+        code = []
+        target_label = None
+
+        # Procura qual do_info corresponde à label que acabou de ser impressa
+        for label, info in self.pending_do.items():
+            # Verifica se esta label é a que está a ser processada agora
+            target_label = label
+            break 
+
+        if target_label in self.pending_do:
+            do_info = self.pending_do[target_label]
+            var_idx = do_info['var_idx']
+            step = do_info['step']
+            start_label = do_info['start_label']
+            end_label = do_info['end_label']
+
+            # Incrementar a variável: var = var + step
+            code.append(f"PUSHG {var_idx}")
+            if isinstance(step, int):
+                code.append(f"PUSHI {step}")
+            elif isinstance(step, float):
+                code.append(f"PUSHF {step}")
+            else: # Se for variável
+                s_idx = self.symbol_table.get_index(step)
+                code.append(f"PUSHG {s_idx}")
+            
+            code.append("ADD")
+            code.append(f"STOREG {var_idx}")
+
+            # Saltar para o teste de condição no início
+            code.append(f"JUMP {start_label}")
+
+            # Colocar a label de saída do loop
+            code.append(f"{end_label}:")
+
+            # Limpar o loop pendente
+            del self.pending_do[target_label]
+
+        return code
 
     def gen_goto(self, node):
         _, label = node
-        return f"JUMP LABEL{label}"
+        return f"JUMP global{label}"
        
     def gen_if(self, node):
         _, cond, then_body, else_body = node
@@ -484,7 +516,7 @@ class Translator:
         end_label  = f"IF{if_id}END"
 
         if isinstance(cond, tuple):
-            code.extend(self.translate_node(cond).splitlines())
+            code.extend(self.translate_node(cond))
         elif isinstance(cond, bool):
             code.append(f"PUSHI {1 if cond else 0}")
         elif isinstance(cond, int):
@@ -497,14 +529,14 @@ class Translator:
 
         then_code = self.translate_node(then_body)
         if then_code:
-            code.extend(then_code.splitlines())
+            code.extend(then_code)
 
         if else_body:
             code.append(f"JUMP {end_label}")
             code.append(f"{else_label}:")
             else_code = self.translate_node(else_body)
             if else_code:
-                code.extend(else_code.splitlines())
+                code.extend(else_code)
 
         code.append(f"{end_label}:")
         return code
@@ -516,7 +548,7 @@ class Translator:
 
         for arg in args:
             if isinstance(arg, tuple):
-                code.extend(self.translate_node(arg).splitlines())
+                code.extend(self.translate_node(arg))
             elif isinstance(arg, bool):
                 code.append(f"PUSHI {1 if arg else 0}")
             elif isinstance(arg, int):
@@ -551,7 +583,7 @@ class Translator:
                 code.append(f"PUSHF {arg}")
                 code.append("WRITEF")
             elif isinstance(arg, tuple):
-                code.extend(self.translate_node(arg).splitlines())
+                code.extend(self.translate_node(arg))
                 arg_type = self.symbol_table.get_expr_type(arg)
                 if arg_type in ("REAL", "DOUBLE"):
                     code.append("WRITEF")
@@ -585,7 +617,9 @@ class Translator:
         code = []
 
         if isinstance(left, tuple):
-            code.extend(self.translate_node(left).splitlines())
+            left_code = self.translate_node(left)
+            if left_code:
+                code.extend(left_code)
         elif isinstance(left, bool):
             code.append(f"PUSHI {1 if left else 0}")
         elif isinstance(left, int):
@@ -601,7 +635,9 @@ class Translator:
                 code.append(f"PUSHG {idx}")
 
         if isinstance(right, tuple):
-            code.extend(self.translate_node(right).splitlines())
+            right_code = self.translate_node(right)
+            if right_code:
+                code.extend(right_code)
         elif isinstance(right, bool):
             code.append(f"PUSHI {1 if right else 0}")
         elif isinstance(right, int):
@@ -637,7 +673,7 @@ class Translator:
         code = []
 
         if isinstance(left, tuple):
-            code.extend(self.translate_node(left).splitlines())
+            code.extend(self.translate_node(left))
         elif isinstance(left, bool):
             code.append(f"PUSHI {1 if left else 0}")
         elif isinstance(left, str):
@@ -645,7 +681,7 @@ class Translator:
             code.append(f"PUSHG {idx}")
 
         if isinstance(right, tuple):
-            code.extend(self.translate_node(right).splitlines())
+            code.extend(self.translate_node(right))
         elif isinstance(right, bool):
             code.append(f"PUSHI {1 if right else 0}")
         elif isinstance(right, str):
@@ -683,7 +719,7 @@ class Translator:
         #     elif isinstance(value, tuple):
         #         val_code = self.translate_node(value)
         #         if val_code:
-        #             code.extend(val_code.splitlines())
+        #             code.extend(val_code)
 
         #     code.append(f"STOREG {idx}")
 
@@ -701,7 +737,7 @@ class Translator:
 
             index_expr = args[0]
             if isinstance(index_expr, tuple):
-                code.extend(self.translate_node(index_expr).splitlines())
+                code.extend(self.translate_node(index_expr))
             elif isinstance(index_expr, int):
                 code.append(f"PUSHI {index_expr}")
             elif isinstance(index_expr, str):
@@ -715,7 +751,7 @@ class Translator:
         else:
             for arg in args:
                 if isinstance(arg, tuple):
-                    code.extend(self.translate_node(arg).splitlines())
+                    code.extend(self.translate_node(arg))
                 elif isinstance(arg, bool):
                     code.append(f"PUSHI {1 if arg else 0}")
                 elif isinstance(arg, int):
@@ -827,7 +863,7 @@ class Translator:
             elif isinstance(arg, tuple):
                 arg_code = self.translate_node(arg)
                 if arg_code:
-                    code.extend(arg_code.splitlines())
+                    code.extend(arg_code)
 
                 expr_type = self.symbol_table.get_expr_type(arg)
 
