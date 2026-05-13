@@ -501,7 +501,7 @@ def p_format(p):
     """
     p[0] = p[1]
 
-def p_assignment(p): # ver caso de var ser acesso ao array
+def p_assignment(p):
     r"""
     Assignment : VAR EQUALS Expression
     """

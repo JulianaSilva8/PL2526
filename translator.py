@@ -1,5 +1,6 @@
 
 import code
+from utils import *
 
 class Translator:
     def __init__(self, symbol_table):
@@ -10,6 +11,8 @@ class Translator:
         self.variables = {}
         self.next_addr = 0
         self.pending_do = {} # para armazenar informações de loops DO pendentes (variável, limite inferior, limite superior, passo)
+
+        self.code_to_add = "" # funções auxiliares a ser added no final do código
 
     def get_push_instruction(self):
         """Dependendo do tipo do scope atual, retorna a instrução de push correta (PUSHG para global, PUSHL para local)"""
@@ -36,7 +39,7 @@ class Translator:
                 code += subr_code
             #print("list: ")
             #print(code)
-        return code
+        return code, self.code_to_add # formatos diferentes, lista de lines + string com código
 
     def translate_node(self, node):
         if isinstance(node, list):  # ← Adiciona isto
@@ -51,7 +54,7 @@ class Translator:
             return code
         
         if not isinstance(node, tuple):
-            return str(node)
+            return self.gen_literals(node)
         op = node[0]
         
         if op == 'DECLARE':                    # SORAIA
@@ -211,57 +214,49 @@ class Translator:
         # allocs de todas as vars declaradas são feitas no inicio da program unit
         return None
 
+    def gen_literals(self, value):
+        code = []
+        if isinstance(value, bool):
+            code.append(f"PUSHI {1 if value else 0}")
+        elif isinstance(value, int):
+            code.append(f"PUSHI {value}")
+        elif isinstance(value, float):
+            code.append(f"PUSHF {value}")
+        elif isinstance(value, str):
+            if value.startswith("'") and value.endswith("'"):
+                literal = value[1:-1].replace('"', '\\"')
+                code.append(f'PUSHS \"{literal}\"')
+            else:
+                # caso seja uma variavel
+                idx = self.symbol_table.get_index(value)
+                code.append(self.get_push_instruction() + " " + str(idx))
+        return code
 
     def gen_assign(self, node):
         _, var, expr = node
         # Se expr for um tuplo, traduzimos primeiro a expressão
         pos_var = self.symbol_table.get_index(var)
         code = []
-        if isinstance(expr, tuple):
-            code = self.translate_node(expr)
-        else:
-            # caso seja um valor literal ou uma variável, colocamos o valor na pilha
-            if isinstance(expr, bool):
-                code.append(f"PUSHI {1 if expr else 0}")
-            elif isinstance(expr, int):
-                code.append(f"PUSHI {expr}")
-            elif isinstance(expr, float):
-                code.append(f"PUSHF {expr}")
-            elif isinstance(expr, str):
-                if expr.startswith("'") and expr.endswith("'"):
-                    literal = expr[1:-1].replace('"', '\\"')
-                    code.append(f'PUSHS \"{literal}\"')
-                else:
-                    # caso seja uma variavel
-                    type = self.symbol_table.get_type(var)
-                    idx = self.symbol_table.get_index(expr)
-                    code.append(self.get_push_instruction() + " " + str(idx))
+        code = self.translate_node(expr)
 
         if isinstance(var, tuple) and var[0] == 'INDEX_OR_CALL': # caso seja um acesso a array, tipo NUMS(I)
             _, var_name, index_expr = var
-            # 1.1. Colocar o endereço base da struct na pilha
-            # Usamos PUSHG ou PUSHL dependendo de onde o ponteiro da struct está guardado
+
+            #storen ordem -> valor, offset, endereço
+            # valor (calc expr)
+            code += self.translate_node(expr)
+
+            # offset 
+            code += self.translate_node(index_expr)
+            code.append("PUSHI 1")
+            code.append("SUB") #(indice em fortran começa em 1)
+
+            # endereço array
             pos_var = self.symbol_table.get_index(var_name)
             push_inst = self.get_push_instruction()
             code.append(f"{push_inst} {pos_var}") # Agora a pilha tem o endereço base do array
 
-            # 1.2. Calcular o índice (I - 1)
-            code += self.translate_node(index_expr
-            code.append("PUSHI 1")
-            code.append("SUB") # Topo agora tem o offset (I-1)
-
-            # 1.3. Calcular o valor da expressão a ser guardada
-            code += self.translate_node(expr)
-
-            # 1.4. Usar STOREN (v, n, a -> a[n] = v)
-            # A pilha está: [EndereçoBase, Offset, Valor]
-            # Mas STOREN espera: Valor, Offset, Endereço. Precisamos ajustar.
-            # Se a tua VM segue v, n, a:
-            code.append("SWAP")      # [Endereço, Valor, Offset]
-            code.append("COPY 3")    # [Endereço, Valor, Offset, Endereço] - copia base para o fim
-            code.append("STOREN")    # Executa a[n] = v
-            # Nota: Dependendo da ordem exata de POP do teu STOREN, 
-            # podes precisar de mais SWAPs para alinhar [Valor, Offset, Endereço].
+            code.append("STOREN") # a[n] = v
             return code
 
         if self.symbol_table.is_return_value(var):
@@ -329,14 +324,40 @@ class Translator:
     def gen_arithmetic(self, node, instr):
         _, left, right = node
         code = []
+        is_float = False
+        
+        if instr == 'POWER':
+            if isinstance(left, int):
+                self.code_to_add += power_function + "\n"
+            elif isinstance(left, float):
+                is_power_float = True
+                self.code_to_add += power_function_float + "\n"
+            code.append("PUSHI 0")
+
+        # otimizações: fazer cálculos caso valores literais
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+            if instr == 'ADD':
+                return [f"PUSHI {left + right}"] if isinstance(left, int) else [f"PUSHF {left + right}"]
+            elif instr == 'SUB':
+                return [f"PUSHI {left - right}"] if isinstance(left, int) else [f"PUSHF {left - right}"]
+            elif instr == 'MUL':
+                return [f"PUSHI {left * right}"] if isinstance(left, int) else [f"PUSHF {left * right}"]
+            elif instr == 'DIV':
+                return [f"PUSHI {int(left / right)}"] if isinstance(left, int) else [f"PUSHF {left / right}"]
+            elif instr == 'MOD':
+                return [f"PUSHI {left % right}"]
+
         # esquerda
         if isinstance(left, tuple):
             code.extend(self.translate_node(left))
+            if self.symbol_table.get_expr_type(left) in ("REAL", "DOUBLE", "FLOAT"):
+                is_float = True
         elif isinstance(left, bool):
             code.append(f"PUSHI {1 if left else 0}")
         elif isinstance(left, int):
             code.append(f"PUSHI {left}")
         elif isinstance(left, float):
+            is_float = True
             code.append(f"PUSHF {left}")
         elif isinstance(left, str):
             idx = self.symbol_table.get_index(left)
@@ -346,26 +367,44 @@ class Translator:
         # direita
         if isinstance(right, tuple):
             code.extend(self.translate_node(right))
+            if self.symbol_table.get_expr_type(right) in ("REAL", "DOUBLE", "FLOAT"):
+                is_float = True
         elif isinstance(right, bool):
             code.append(f"PUSHI {1 if right else 0}")
         elif isinstance(right, int):
             code.append(f"PUSHI {right}")
         elif isinstance(right, float):
+            is_float = True
             code.append(f"PUSHF {right}")
         elif isinstance(right, str):
             idx = self.symbol_table.get_index(right)
             push_inst = self.get_push_instruction()
             code.append(f"{push_inst} {idx}")
 
-        # operação
-        op_map = {
-            'ADD': 'ADD',
-            'SUB': 'SUB',
-            'MUL': 'MUL',
-            'DIV': 'DIV',
-            'MOD': 'MOD',
-            'POWER': 'POW'
-        }
+        if instr == 'POWER':
+            if is_power_float:
+                code.append("PUSHA POWERFLOAT")
+            else: code.append("PUSHA POWER")
+            code.append("CALL")
+            code.append("POP 2")
+            return code
+
+        if is_float:
+            op_map = {
+                'ADD': 'FADD',
+                'SUB': 'FSUB',
+                'MUL': 'FMUL',  
+                'DIV': 'FDIV',
+                'MOD': 'FMOD'
+            }
+        else:  
+            op_map = {
+                'ADD': 'ADD',
+                'SUB': 'SUB',
+                'MUL': 'MUL',
+                'DIV': 'DIV',
+                'MOD': 'MOD'
+            }
         code.append(op_map[instr])
         return code
     
@@ -862,8 +901,8 @@ class Translator:
     def gen_concat(self, node):
         _, left, right = node
         code = []
-        code.append(self.translate_node(left))
-        code.append(self.translate_node(right))
+        code += self.translate_node(left)
+        code += self.translate_node(right)
         code.append("CONCAT")
         return code
     

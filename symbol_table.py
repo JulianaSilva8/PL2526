@@ -107,7 +107,12 @@ class SymbolTable:
         
         if self.__table[name]['is_array']:
             if index is None:
-                raise SemanticError(f"Must provide an index to assign a value to array variable '{name}'.")
+                if not self.__table[name]['type'] == "CHARACTER":
+                    raise SemanticError(f"Must provide an index to assign a value to array variable '{name}'.")
+                if not self.is_type_compatible(self.get_expr_type(value), 'CHARACTER'):
+                    raise SemanticError(f"Type mismatch: cannot assign value of type {self.get_expr_type(value)} to array variable '{name}' of type CHARACTER.")
+                return
+            
             if not isinstance(index, int):
                 # caso seja uma expressão verifica só o tipo
                 index_type = self.get_expr_type(index)
@@ -269,6 +274,7 @@ class SymbolTable:
             t1 = self.get_expr_type(node[1])
             t2 = self.get_expr_type(node[2])
             if t1 in ['CHARACTER', 'STRING'] and t2 in ['CHARACTER', 'STRING']:
+                print("concat compatible: " + str(t1) + str(t2))
                 return 'STRING'
             else:
                 raise SemanticError(f"Operação {op} inválida entre {t1} e {t2}")

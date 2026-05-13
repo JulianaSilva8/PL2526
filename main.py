@@ -13,12 +13,12 @@ def main(args):
         lexer = lex.lex()
         ast, symbol_table = get_ast(data, lexer)
         translator = Translator(symbol_table)
-        code = translator.translate(ast)
+        code, aux = translator.translate(ast)
         
         with open('output.txt', "w") as f:
             for line in code:
                 f.write(line + "\n")
-
+            f.write(aux)
     except (LexError, ParseError, SemanticError, SemanticWarning) as e:
         print(f"Erro: {e}")
     
