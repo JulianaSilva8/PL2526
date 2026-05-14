@@ -332,6 +332,7 @@ class Translator:
         _, left, right = node
         code = []
         is_float = False
+        is_power_float = False
         
         if instr == 'POWER':
             if isinstance(left, int):
@@ -417,6 +418,12 @@ class Translator:
     
     def gen_not(self, node):
         _, expr = node
+        
+        # Otimização: duplo not
+        if isinstance(expr, tuple) and expr[0] == 'NOT':
+            print("Aplicando otimização de duplo NOT")
+            return self.translate_node(expr[1])
+        
         code = []
 
         if isinstance(expr, tuple): # 
@@ -490,6 +497,16 @@ class Translator:
 
     def gen_do(self, node): # NAO PERCEBI BEM ESTA
         _, target_label, var, start, end, step = node
+        
+        # Otimização
+        if isinstance(start, (int, float)) and isinstance(end, (int, float)) and isinstance(step, (int, float)):
+            if step > 0 and start > end:
+                print("Otimização: loop DO não executa")
+                return [] # loop nunca executa
+            if step < 0 and start < end:
+                print("Otimização: loop DO não executa")
+                return [] # loop nunca executa
+
         code = []
 
         # gerar labels únicos para o início e fim do loop
@@ -597,6 +614,16 @@ class Translator:
        
     def gen_if(self, node):
         _, cond, then_body, else_body = node
+        
+        # Otimização: se a condição for um valor literal, podemos calcular o resultado já aqui e evitar gerar código desnecessário
+        if isinstance(cond, bool):
+            if cond:
+                print("Otimização: condição IF é verdadeira, gerando apenas o corpo THEN")
+                return self.translate_node(then_body)
+            else:
+                print("Otimização: condição IF é falsa, gerando apenas o corpo ELSE")
+                return self.translate_node(else_body) if else_body else []
+        
         code = []
 
         self.label_count += 1
@@ -706,8 +733,23 @@ class Translator:
     
     def gen_relational(self, node):
         op, left, right = node
-        code = []
+        
+        # Otimização: se ambos os lados forem valores literais, podemos calcular o resultado já aqui e evitar gerar código desnecessário
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+            ops = {
+                'LT': left < right,
+                'LE': left <= right,
+                'GT': left > right,
+                'GE': left >= right,
+                'EQ': left == right,
+                'NE': left != right
+            }
+            result = 1 if ops[op] else 0
+            print(f"Otimização: expressão relacional com operandos literais, resultado é {result}")
+            return [f"PUSHI {result}"]
 
+        code = []
+        
         if isinstance(left, tuple):
             left_code = self.translate_node(left)
             if left_code:
@@ -764,6 +806,16 @@ class Translator:
     
     def gen_logical(self, node):
         op, left, right = node
+        
+        # Otimização: se ambos os lados forem booleanos literais, podemos calcular o resultado já aqui e evitar gerar código desnecessário
+        if isinstance(left, bool) and isinstance(right, bool):
+            if op == 'AND':
+                res = left and right
+            else: # OR
+                res = left or right
+            print(f"Otimização: expressão lógica com operandos literais, resultado é {res}")
+            return [f"PUSHI {1 if res else 0}"]
+        
         code = []
 
         if isinstance(left, tuple):
