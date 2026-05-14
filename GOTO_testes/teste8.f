@@ -1,0 +1,6 @@
+C     Tem que dar erro (LABEL DUPLICADA)
+      PROGRAM TEST
+      INTEGER I
+10    CONTINUE
+10    CONTINUE
+      END
