@@ -625,9 +625,9 @@ parser.quit = False
 def get_ast(data, lexer):
     ast = parser.parse(data, lexer=lexer)
 
-        parser.symbol_table.verify_pending_gotos()
-        parser.symbol_table.verify_pending_do_labels()
-        parser.symbol_table.verify_pending_calls()
+    parser.symbol_table.verify_pending_gotos()
+    parser.symbol_table.verify_pending_do_labels()
+    parser.symbol_table.verify_pending_calls()
 
     return ast, parser.symbol_table
         

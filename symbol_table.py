@@ -109,8 +109,13 @@ class SymbolTable:
             if index is None:
                 if not self.__table[name]['type'] == "CHARACTER":
                     raise SemanticError(f"Must provide an index to assign a value to array variable '{name}'.")
-                if not self.is_type_compatible(self.get_expr_type(value), 'CHARACTER'):
+                
+                if not self.is_type_compatible(self.__table[name]['type'], self.get_expr_type(value)):
                     raise SemanticError(f"Type mismatch: cannot assign value of type {self.get_expr_type(value)} to array variable '{name}' of type CHARACTER.")
+                
+                self.initialize(name) # marcar a variável como inicializada e verificar se foi declarada
+                if not isinstance(value, tuple): 
+                    self.__table[name]['value'] = value
                 return
             
             if not isinstance(index, int):
@@ -142,7 +147,9 @@ class SymbolTable:
             return True
         elif type1 == 'LOGICAL' and type2 == 'LOGICAL':
             return True
-        elif type1 in ['CHARACTER', 'STRING'] and type2 == 'CHARACTER':
+        elif type1 == 'CHARACTER' and type2 in ['CHARACTER', 'STRING']:
+            return True
+        elif type1 == 'STRING' and type2 in ['CHARACTER', 'STRING']:
             return True
         return False
 
