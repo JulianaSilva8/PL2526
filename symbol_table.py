@@ -295,12 +295,15 @@ class SymbolTable:
 
         # 3. Se for uma string (nome de identificador)
         if isinstance(node, str):
-            var_info = self.symbol_table.lookup(node)
+            try:
+                var_info = self.lookup(node)
+            except SemanticError:
+                return False
+            
             # SÓ é constante se o identificador for outro PARAMETER
             if var_info and var_info.get('is_parameter'):
                 return True
             return False
-
         return False
     
     def push_scope(self, scope_name, scope_type, return_type=None):
@@ -337,8 +340,8 @@ class SymbolTable:
             # se for func e não houve nenhum value assignment print de warning. limitações: não verifica IFs
             if not self.is_return_value_assigned():
                 print(f"Warning: Function '{self.__scope_stack[-1]}' has no return value assigned.")
-
-
+                
+            # verificar e limpar os GOTOs pendentes do scope que está a fechar
             self.__scope_stack.pop()
             self.__current_scope = self.__scope_stack[-1]
             self.__table = self.__all_scopes[self.__scope_stack[-1]]['vars']
@@ -519,24 +522,45 @@ class SymbolTable:
 
     def register_goto_label(self, label):
         """Guarda um GOTO para ser verificado no fim do scope."""
-        if label not in self.__table:
-            self.gotos_to_verify.append((self.get_current_scope_name(), label))
-        elif not self.__table[label]['is_label']:
-            raise SemanticError(f"GOTO or DO target '{label}' is not a label.")
+        label_key = f"__label_{label}"
+        # Se o label já existe, verificar se é um label válido (is_label = True). Se não existir, guardar para verificar no fim do scope. 
+        if label_key in self.__table:
+            if not self.__table[label_key]['is_label']:
+                raise SemanticError(f"GOTO or DO target '{label}' is not a label.")
+        self.gotos_to_verify.append((self.get_current_scope_name(), label))
 
-    def verify_pending_gotos(self):
-        """Verifica se todos os GOTO apontam para labels existentes no respetivo scope."""
+    def verify_pending_gotos(self, scope_filter=None):
+        """Verifica se todos os GOTO apontam para labels existentes no mesmo scope.
+        
+           Podem ser levantados dois erros:
+            - GOTO para label que não existe
+            - GOTO cross-scope
+        """
         errors = []
-        current_table = self.__table # guardar a tabela atual para voltar a ela 
-
+        save_table = self.__table # guardar a tabela atual para voltar a ela 
+        
         for scope_name, label in self.gotos_to_verify:
-            self.__table = self.__all_scopes[scope_name]['vars'] # mudar para a tabela do scope onde o GOTO foi declarado
-            try:
-                self.check_label_exists(label)
-            except SemanticError as e:
-                errors.append(str(e))
-
-        self.__table = current_table # voltar à tabela original
+            label_key = f"__label_{label}"
+            scope_vars = self.__all_scopes[scope_name]['vars'] # mudar para a tabela do scope onde o GOTO foi declarado
+            
+            if label_key in scope_vars:
+                if not scope_vars[label_key]['is_label']:
+                    errors.append(f"GOTO target '{label}' in scope '{scope_name}' is not a label.")
+                continue
+            
+            # verificar nos outros scopes
+            
+            found_another_scope = [
+                scope_name for scope_name, scope_info in self.__all_scopes.items()
+                if label_key in scope_info['vars'] and scope_info['vars'][label_key]['is_label']
+            ]
+            
+            if found_another_scope:
+                errors.append(f"GOTO target '{label}' in scope '{scope_name}' is not defined in this scope (found in scopes: {', '.join(found_another_scope)}).")
+            else:
+                errors.append(f"GOTO target label '{label}' in scope '{scope_name}' is not defined.")
+                
+            self.__table = save_table # voltar à tabela original
         
         if errors:
             raise SemanticError("\n".join(errors))

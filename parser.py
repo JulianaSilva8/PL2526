@@ -616,16 +616,16 @@ parser.symbol_table = SymbolTable()
 parser.quit = False
 
 def get_ast(data, lexer):
-    try:
+    # try:
         ast = parser.parse(data, lexer=lexer)
 
         parser.symbol_table.verify_pending_gotos()
         parser.symbol_table.verify_pending_calls()
 
         return ast, parser.symbol_table
-    except Exception as e:
-        print(e)
-        return None
+    # except Exception as e:
+    #     print(e)
+    #     return None
 
 def main(args):
     with open(args[1], "r") as f:
