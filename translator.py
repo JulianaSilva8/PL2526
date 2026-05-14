@@ -110,8 +110,8 @@ class Translator:
             if value['is_array']:
                 # TO DO: ver casos em que size é uma expressao/variavel
                 if value['type'] == 'CHARACTER':
-                    #to do
-                    pass
+                    
+                    code.append(f'PUSHS ""')
                 else:
                     size = value['size']
                     code.append(f"ALLOC {size}")
@@ -208,7 +208,7 @@ class Translator:
         code.append("RETURN")
         code.append("\n")
 
-        return
+        return code
     
     def gen_declaration(self, node): 
         # allocs de todas as vars declaradas são feitas no inicio da program unit
@@ -235,29 +235,31 @@ class Translator:
     def gen_assign(self, node):
         _, var, expr = node
         # Se expr for um tuplo, traduzimos primeiro a expressão
-        pos_var = self.symbol_table.get_index(var)
         code = []
-        code = self.translate_node(expr)
-
+        # A(1) = 10
         if isinstance(var, tuple) and var[0] == 'INDEX_OR_CALL': # caso seja um acesso a array, tipo NUMS(I)
-            _, var_name, index_expr = var
-
-            #storen ordem -> valor, offset, endereço
-            # valor (calc expr)
-            code += self.translate_node(expr)
-
-            # offset 
-            code += self.translate_node(index_expr)
-            code.append("PUSHI 1")
-            code.append("SUB") #(indice em fortran começa em 1)
+            _, var_name, indices = var
+            index_expr = indices[0]
 
             # endereço array
             pos_var = self.symbol_table.get_index(var_name)
             push_inst = self.get_push_instruction()
             code.append(f"{push_inst} {pos_var}") # Agora a pilha tem o endereço base do array
 
+            # offset 
+            code += self.translate_node(index_expr)
+            code.append("PUSHI 1")
+            code.append("SUB") #(indice em fortran começa em 1)
+
+            #storen ordem -> valor, offset, endereço
+            # valor (calc expr)
+            code += self.translate_node(expr)
+
             code.append("STOREN") # a[n] = v
             return code
+        #A = 10
+        pos_var = self.symbol_table.get_index(var)
+        code += self.translate_node(expr)
 
         if self.symbol_table.is_return_value(var):
             address = self.symbol_table.get_return_address(var)
@@ -296,6 +298,16 @@ class Translator:
             elif isinstance(arg, float): # PRINT * REAL/DOUBLE
                 code.append(f"PUSHF {arg}")
                 code.append("WRITEF")
+            elif isinstance(arg, tuple): # PRINT * EXPRESSAO
+                code.extend(self.translate_node(arg))
+                arg_type = self.symbol_table.get_expr_type(arg)
+
+                if arg_type in ("REAL", "DOUBLE"):
+                    code.append("WRITEF")
+                elif arg_type in ("CHARACTER", "STRING"):
+                    code.append("WRITES")
+                else:
+                    code.append("WRITEI")
             elif isinstance(arg, str): # PRINT * STRING
                 try:
                     idx = self.symbol_table.get_index(arg)
@@ -879,7 +891,14 @@ class Translator:
         scope_name = self.symbol_table.get_current_scope_name()
         full_label_name = f"{scope_name}{label_name}"
         code = [full_label_name + ":"] 
-        code += self.translate_node(statement)
+        stmt_code = self.translate_node(statement)
+
+        if stmt_code:
+            code += stmt_code
+
+        if label_name in self.pending_do:
+            code += self.gen_continue(('CONTINUE',))
+            
         return code
     
     def gen_stop(self, node):
