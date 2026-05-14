@@ -1,0 +1,5 @@
+      PROGRAM DO_LIMIT_TYPE_ERROR
+      INTEGER I
+      DO 10 I = 1, 'A'
+   10 CONTINUE
+      END

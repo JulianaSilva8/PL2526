@@ -3,7 +3,7 @@ import sys
 from ply import lex, yacc
 from lexer import lexer, tokens
 from symbol_table import SymbolTable
-from errors import ParseError, SemanticError, SemanticWarning, LexError
+from errors import ParseError, SemanticError, LexError
 
 
 def p_declaration(p):
@@ -369,9 +369,9 @@ def p_call_statement(p):
     if len(p) == 6:
         args = p[4]
     # chamar a subrotina 
-    parser.symbol_table.add_subroutine_call(p[2], args) # para verificar agora ou no final se a subrotina foi declarada
 
     p[0] = ('CALL', p[2], args)
+    parser.symbol_table.add_subroutine_call(p[0])
 
 def p_index_or_call(p): # 
     r"""
@@ -422,6 +422,13 @@ def p_print_statement(p): # print sem args -> linha vazia
                    | PRINT Format
     """
     #parser.symbol_table.verify_format(p[2], p[4] if len(p) == 5 else []) # verificar que os argumentos são compatíveis com o formato
+    for arg in (p[4] if len(p) == 5 else []):
+        if isinstance(arg, str) and not (arg.startswith('\'') and arg.endswith('\'')):
+            if not parser.symbol_table.is_initialized(arg):
+                raise SemanticError(f"Variable '{arg}' used in PRINT statement must be declared and initialized before use.")
+        elif isinstance(arg, tuple):
+            parser.symbol_table.get_expr_type(arg) # também já verifica inicialização/compatibilidade
+
     if len(p) == 3:
         # PRINT Format
         p[0] = ('PRINT', p[2], [])
@@ -616,17 +623,14 @@ parser.symbol_table = SymbolTable()
 parser.quit = False
 
 def get_ast(data, lexer):
-    try:
-        ast = parser.parse(data, lexer=lexer)
+    ast = parser.parse(data, lexer=lexer)
 
         parser.symbol_table.verify_pending_gotos()
         parser.symbol_table.verify_pending_do_labels()
         parser.symbol_table.verify_pending_calls()
 
-        return ast, parser.symbol_table
-    except Exception as e:
-        print(e)
-        return None
+    return ast, parser.symbol_table
+        
 
 def main(args):
     with open(args[1], "r") as f:

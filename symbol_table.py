@@ -124,7 +124,7 @@ class SymbolTable:
 
         value_type = self.get_expr_type(value)
         var_type = self.__table[name]['type']
-        if not self.is_type_compatible(value_type, var_type) and not self.get_current_scope_type() == 'FUNCTION':
+        if not self.is_type_compatible(var_type, value_type) and not self.get_current_scope_type() == 'FUNCTION':
             raise SemanticError(f"Type mismatch: cannot assign value of type {value_type} to variable '{name}' of type {var_type}.")
         if self.get_current_scope_type() == 'FUNCTION' and name == self.get_current_scope_name() and not self.is_type_compatible(value_type, self.get_return_type(self.get_current_scope_name())):
             raise SemanticError(f"Type mismatch: cannot assign value of type {value_type} to return variable '{name}' of type {self.get_return_type(self.get_current_scope_name())}.")
@@ -144,10 +144,6 @@ class SymbolTable:
             return True
         elif type1 in ['CHARACTER', 'STRING'] and type2 == 'CHARACTER':
             return True
-        elif type1 == 'DOUBLE' and type2 in ['DOUBLE', 'REAL', 'INTEGER']:
-            return True
-        elif type1 in ['REAL', 'DOUBLE'] and type2 in ['REAL', 'DOUBLE', 'INTEGER']:
-            return True
         return False
 
     def get_type(self, name):
@@ -161,6 +157,7 @@ class SymbolTable:
         if name not in self.__table:
             raise SemanticError(f"Symbol '{name}' not declared.")
         return self.__table[name].get('value', None)
+    
 
     def is_initialized(self, name):
         """Check if a variable has been initialized."""
@@ -207,8 +204,7 @@ class SymbolTable:
                     return 'STRING'
 
             # senão é string ou char é var       
-              
-            if node not in self.__table or self.__table[node]['initialized'] == False:
+            if node not in self.__table or self.__table[node]['initialized'] == False and not self.__table[node]['is_parameter'] and not self.__table[node]['is_array']:
                 raise SemanticError(f"Undeclared or uninitialized variable: '{node}'.")
             if self.__table[node]['type'] is None:
                 raise SemanticError(f"Variable '{node}' has no declared type.")
@@ -221,7 +217,7 @@ class SymbolTable:
             if name in self.__table:
                 if self.__table[name]['is_array']:
                     if len(node[2]) != 1:
-                        raise SemanticError(f"Array variable '{name}' accessed with wrong number of indices- only ")
+                        raise SemanticError(f"Array variable '{name}' accessed with wrong number of indices: expected 1, got {len(node[2])}.")
                     self.check_array_access(name, node[2][0]) 
                     if self.__table[name]['type'] is None:
                         raise SemanticError(f"Array variable '{name}' has no declared type.")
@@ -242,6 +238,8 @@ class SymbolTable:
         if op in ['ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'POWER']:
             t1 = self.get_expr_type(node[1])
             t2 = self.get_expr_type(node[2])
+            if t1 not in ['INTEGER', 'REAL'] or t2 not in ['INTEGER', 'REAL']:
+                raise SemanticError(f"Operation {op} not possible between {t1} and {t2}.")
             if t1 == 'REAL' or t2 == 'REAL': return 'REAL'
             return 'INTEGER'
         
@@ -253,7 +251,7 @@ class SymbolTable:
             if (t1 in numericos and t2 in numericos) or (t1 in strings and t2 in strings):
                 return 'LOGICAL'
             else:
-                raise SemanticError(f"Operação {op} inválida entre {t1} e {t2}")
+                raise SemanticError(f"Operation {op} invalid between {t1} e {t2}")
             
         if op in ['AND', 'OR']:
             t1 = self.get_expr_type(node[1])
@@ -422,8 +420,9 @@ class SymbolTable:
             raise SemanticError(f"Cannot assign a value to parameter '{name}' after declaration.")
         
 
-    def add_subroutine_call(self, name, arglist):
+    def add_subroutine_call(self, node):
         """Check if a subroutine call is valid or add it to the list of calls to verify."""
+        name, arglist = node[1], node[2]
         if name in self.__all_scopes:
             self.check_is_subroutine(name)
             self.check_call_args(name, [self.get_expr_type(arg) for arg in arglist])

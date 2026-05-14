@@ -1,0 +1,5 @@
+      PROGRAM DO_VAR_TYPE_ERROR
+      REAL I
+      DO 10 I = 1, 3
+   10 CONTINUE
+      END

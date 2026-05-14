@@ -1,0 +1,6 @@
+      PROGRAM SAME_NAME
+      INTEGER I
+      END
+      SUBROUTINE SAME_NAME
+      INTEGER A
+      END
