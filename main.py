@@ -1,7 +1,7 @@
 from translator import Translator
 from parser import * 
 from lexer import *
-from errors import LexError, ParseError, SemanticError, SemanticWarning
+from errors import LexError, ParseError, SemanticError
 from symbol_table import SymbolTable
 import sys
 
@@ -20,8 +20,13 @@ def main(args):
             for line in code:
                 f.write(line + "\n")
             f.write(aux)
-    except (LexError, ParseError, SemanticError, SemanticWarning) as e:
-        print(f"Erro: {e}")
+        print("Successfully translated to output.txt")
+    except LexError as e:
+        print(f"Erro de análise léxica: {e}")
+    except ParseError as e:
+        print(f"Erro de análise sintática: {e}")
+    except SemanticError as e:
+        print(f"Erro de análise semântica: {e}")
     
     
 if __name__ == "__main__":

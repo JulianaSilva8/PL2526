@@ -122,7 +122,7 @@ def check_indentation(data):
         content = label_area.strip()
         if content:
             if not content.isdigit():
-                raise LexError(f"Erro na linha {i+1}: Caracteres inválidos na zona do label (colunas 1-5).")
+                raise LexError(f"Erro de indentação na linha {i+1}: Colunas 1-5 devem reservadas para labels")
     return data
 
 def t_error(t): 

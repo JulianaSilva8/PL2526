@@ -1,0 +1,4 @@
+      PROGRAM DUP_LABEL
+   10 CONTINUE
+   10 CONTINUE
+      END

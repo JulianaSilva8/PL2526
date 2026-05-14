@@ -24,7 +24,7 @@ class SymbolTable:
         self.calls_to_verify = [] # para guardar as chamadas de funções/subrotinas que não estão na symbol table no momento da análise semântica, para verificar no final se estão declaradas
                                     # (node, symbol_table_entry)
         self.gotos_to_verify = [] # para guardar os GOTO targets que não estão na symbol table no momento da análise semântica, para verificar no final se estão declarados
-
+        self.do_labels_to_verify = [] 
     def __repr__(self):
         return self.__table.__repr__()
 
@@ -109,8 +109,13 @@ class SymbolTable:
             if index is None:
                 if not self.__table[name]['type'] == "CHARACTER":
                     raise SemanticError(f"Must provide an index to assign a value to array variable '{name}'.")
-                if not self.is_type_compatible(self.get_expr_type(value), 'CHARACTER'):
+                
+                if not self.is_type_compatible(self.__table[name]['type'], self.get_expr_type(value)):
                     raise SemanticError(f"Type mismatch: cannot assign value of type {self.get_expr_type(value)} to array variable '{name}' of type CHARACTER.")
+                
+                self.initialize(name) # marcar a variável como inicializada e verificar se foi declarada
+                if not isinstance(value, tuple): 
+                    self.__table[name]['value'] = value
                 return
             
             if not isinstance(index, int):
@@ -124,7 +129,7 @@ class SymbolTable:
 
         value_type = self.get_expr_type(value)
         var_type = self.__table[name]['type']
-        if not self.is_type_compatible(value_type, var_type) and not self.get_current_scope_type() == 'FUNCTION':
+        if not self.is_type_compatible(var_type, value_type) and not self.get_current_scope_type() == 'FUNCTION':
             raise SemanticError(f"Type mismatch: cannot assign value of type {value_type} to variable '{name}' of type {var_type}.")
         if self.get_current_scope_type() == 'FUNCTION' and name == self.get_current_scope_name() and not self.is_type_compatible(value_type, self.get_return_type(self.get_current_scope_name())):
             raise SemanticError(f"Type mismatch: cannot assign value of type {value_type} to return variable '{name}' of type {self.get_return_type(self.get_current_scope_name())}.")
@@ -142,11 +147,9 @@ class SymbolTable:
             return True
         elif type1 == 'LOGICAL' and type2 == 'LOGICAL':
             return True
-        elif type1 in ['CHARACTER', 'STRING'] and type2 == 'CHARACTER':
+        elif type1 == 'CHARACTER' and type2 in ['CHARACTER', 'STRING']:
             return True
-        elif type1 == 'DOUBLE' and type2 in ['DOUBLE', 'REAL', 'INTEGER']:
-            return True
-        elif type1 in ['REAL', 'DOUBLE'] and type2 in ['REAL', 'DOUBLE', 'INTEGER']:
+        elif type1 == 'STRING' and type2 in ['CHARACTER', 'STRING']:
             return True
         return False
 
@@ -161,6 +164,7 @@ class SymbolTable:
         if name not in self.__table:
             raise SemanticError(f"Symbol '{name}' not declared.")
         return self.__table[name].get('value', None)
+    
 
     def is_initialized(self, name):
         """Check if a variable has been initialized."""
@@ -207,8 +211,7 @@ class SymbolTable:
                     return 'STRING'
 
             # senão é string ou char é var       
-              
-            if node not in self.__table or self.__table[node]['initialized'] == False:
+            if node not in self.__table or self.__table[node]['initialized'] == False and not self.__table[node]['is_parameter'] and not self.__table[node]['is_array']:
                 raise SemanticError(f"Undeclared or uninitialized variable: '{node}'.")
             if self.__table[node]['type'] is None:
                 raise SemanticError(f"Variable '{node}' has no declared type.")
@@ -221,7 +224,7 @@ class SymbolTable:
             if name in self.__table:
                 if self.__table[name]['is_array']:
                     if len(node[2]) != 1:
-                        raise SemanticError(f"Array variable '{name}' accessed with wrong number of indices- only ")
+                        raise SemanticError(f"Array variable '{name}' accessed with wrong number of indices: expected 1, got {len(node[2])}.")
                     self.check_array_access(name, node[2][0]) 
                     if self.__table[name]['type'] is None:
                         raise SemanticError(f"Array variable '{name}' has no declared type.")
@@ -242,6 +245,8 @@ class SymbolTable:
         if op in ['ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'POWER']:
             t1 = self.get_expr_type(node[1])
             t2 = self.get_expr_type(node[2])
+            if t1 not in ['INTEGER', 'REAL'] or t2 not in ['INTEGER', 'REAL']:
+                raise SemanticError(f"Operation {op} not possible between {t1} and {t2}.")
             if t1 == 'REAL' or t2 == 'REAL': return 'REAL'
             return 'INTEGER'
         
@@ -253,7 +258,7 @@ class SymbolTable:
             if (t1 in numericos and t2 in numericos) or (t1 in strings and t2 in strings):
                 return 'LOGICAL'
             else:
-                raise SemanticError(f"Operação {op} inválida entre {t1} e {t2}")
+                raise SemanticError(f"Operation {op} invalid between {t1} e {t2}")
             
         if op in ['AND', 'OR']:
             t1 = self.get_expr_type(node[1])
@@ -401,13 +406,21 @@ class SymbolTable:
             raise SemanticError(f"Undeclared variable: '{name}'.")
         if not self.__table[name]['is_array']:
             raise SemanticError(f"Variable '{name}' is not an array.")
-        if index is not None:
-            if isinstance(index, int):
-                size = self.__table[name]['size']
-                if index < 1 or index > size:
-                    raise SemanticError(f"Array index out of bounds for variable '{name}': {index} (size: {size}).")
-                else:
-                    raise SemanticError(f"Array index for variable '{name}' must be an integer.")
+        if index is None:
+            return
+        
+        if isinstance(index, int):
+            size = self.__table[name]['size']
+            if index < 1 or index > size:
+                raise SemanticError(
+                    f"Array index out of bounds for variable '{name}': {index} (size: {size})."
+                )
+            return
+        index_type = self.get_expr_type(index)
+        if index_type != 'INTEGER':
+            raise SemanticError(
+                f"Array index for variable '{name}' must be of type INTEGER, got {index_type}."
+            )
     
     def check_parameter_assignment(self, name):
         """Check if a parameter is being assigned a value after declaration."""
@@ -417,13 +430,14 @@ class SymbolTable:
             raise SemanticError(f"Cannot assign a value to parameter '{name}' after declaration.")
         
 
-    def add_subroutine_call(self, name, arglist):
+    def add_subroutine_call(self, node):
         """Check if a subroutine call is valid or add it to the list of calls to verify."""
+        name, arglist = node[1], node[2]
         if name in self.__all_scopes:
             self.check_is_subroutine(name)
             self.check_call_args(name, [self.get_expr_type(arg) for arg in arglist])
         else:
-            self.calls_to_verify.append((name, arglist))
+            self.calls_to_verify.append((('CALL', name, arglist), self.get_current_scope_name()))
         
     def check_call_args(self, scope_name, args_types):
         """Verificar número e tipos dos argumentos numa chamada de função/subrotina."""
@@ -561,6 +575,34 @@ class SymbolTable:
                 errors.append(f"GOTO target label '{label}' in scope '{scope_name}' is not defined.")
                 
             self.__table = save_table # voltar à tabela original
+        
+        if errors:
+            raise SemanticError("\n".join(errors))
+        
+    def register_do_label(self, label):
+        self.do_labels_to_verify.append((self.get_current_scope_name(), label))
+
+    def check_valid_do_label(self, label):
+        label_key = f"__label_{label}"
+        label_info = self.__table[label_key]
+        stmt_type = label_info.get('statement')[0]
+        wrong_label = {'IF', 'DO', 'STOP', 'RETURN', 'PAUSE', 'END', 'ELSEIF', 'ELSE', 'ENDIF', 'THEN'}
+
+        if stmt_type in wrong_label:
+            raise SemanticError(f"Invalid terminal statement for DO label {label}: {stmt_type}.")
+        
+    def verify_pending_do_labels(self):
+        errors = []
+        current_table = self.__table # guardar a tabela atual para voltar a ela 
+
+        for scope_name, label in self.do_labels_to_verify:
+            self.__table = self.__all_scopes[scope_name]['vars'] # mudar para a tabela do scope onde o DO foi declarado
+            try:
+                self.check_valid_do_label(label)
+            except SemanticError as e:
+                errors.append(str(e))
+
+        self.__table = current_table # voltar à tabela original
         
         if errors:
             raise SemanticError("\n".join(errors))

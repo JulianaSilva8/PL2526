@@ -1,0 +1,4 @@
+      PROGRAM UNINITIALIZED_ACCESS
+      INTEGER A
+      PRINT *, A
+      END
