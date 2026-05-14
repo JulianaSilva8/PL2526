@@ -1,0 +1,4 @@
+      PROGRAM UNDECLARED_ASSIGN
+      INTEGER A
+      B = 1
+      END

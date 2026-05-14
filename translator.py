@@ -24,8 +24,6 @@ class Translator:
     def translate(self, program_units):
         code = []
         
-        #print("list: ")
-        #print(code)
         for p in program_units:
             op = p[0]
             if op == 'PROGRAM':
@@ -37,8 +35,6 @@ class Translator:
             elif op == 'SUBROUTINE':
                 subr_code = self.gen_subroutine(p)
                 code += subr_code
-            #print("list: ")
-            #print(code)
         return code, self.code_to_add # formatos diferentes, lista de lines + string com código
 
     def translate_node(self, node):
@@ -265,7 +261,6 @@ class Translator:
         elif self.symbol_table.get_current_scope_type() == 'FUNCTION' or self.symbol_table.get_current_scope_type() =='SUBROUTINE':
             code.append(f"STOREL {pos_var}")
         else:    
-            print(self.symbol_table.get_current_scope_type())
             code.append(f"STOREG {pos_var}")
             
         return code

@@ -1,0 +1,3 @@
+      PROGRAM GOTO_INVALID_LABEL
+      GOTO 99
+      END
