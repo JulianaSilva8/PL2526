@@ -10,6 +10,7 @@ def main(args):
     with open(args[1], "r") as f:
         data = f.read()
     try: 
+        check_indentation(data)
         lexer = lex.lex()
         ast, symbol_table = get_ast(data, lexer)
         translator = Translator(symbol_table)

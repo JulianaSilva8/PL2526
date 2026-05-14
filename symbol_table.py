@@ -274,7 +274,6 @@ class SymbolTable:
             t1 = self.get_expr_type(node[1])
             t2 = self.get_expr_type(node[2])
             if t1 in ['CHARACTER', 'STRING'] and t2 in ['CHARACTER', 'STRING']:
-                print("concat compatible: " + str(t1) + str(t2))
                 return 'STRING'
             else:
                 raise SemanticError(f"Operação {op} inválida entre {t1} e {t2}")

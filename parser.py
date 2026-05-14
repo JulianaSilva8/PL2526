@@ -63,7 +63,6 @@ def p_type(p):
     Type : INTEGER
          | REAL
          | LOGICAL
-         | DOUBLE
          | CHARACTER
          | CHARACTER "*" INT
     """

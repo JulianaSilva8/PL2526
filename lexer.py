@@ -28,7 +28,7 @@ reserved = {
     "PARAMETER": "PARAMETER", # PARAMETER define uma constante, enquanto x = 10 define uma variável.
 }
 
-tokens = ["LABEL", "INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", "DOUBLE",
+tokens = ["LABEL", "INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "VAR", 
           "OPADDSUB", "OPDIV", "AND", "OR", "NOT", "EQUALS", "STRING", "POWER", "CONCAT", "CONTINUATION"]+ list(reserved.values())
 
 
@@ -36,11 +36,6 @@ def t_COMMENT(t):
     # capturar linhas de comentário que começam na coluna 1 com 'C' ou '*'
     r'(?m:^[cC*].*)'
     pass # ignorar os comentários, não precisamos deles para a análise sintática
-
-def t_DOUBLE(t):
-    r"DOUBLE\s+PRECISION"
-    t.value = "DOUBLE PRECISION"
-    return t
 
 def t_NREAL(t):
     r"(?:\d+\.\d*|\.\d+)(?:[eEdD][+\-]?\d+)?"
@@ -114,8 +109,22 @@ t_ignore = " \t"
 
 literals = "(),*'"
 
-
+def check_indentation(data):
+    lines = data.split('\n')
+    for i, line in enumerate(lines):
+        if not line.strip() or line[0].upper() in ['C', '*']:
+            continue
     
+        l = line.replace('\t', '      ')  # contar tabs como 6 espaços
+        label_area = l[0:5]      # colunas 1-5
+
+        # antes de 6 só labels
+        content = label_area.strip()
+        if content:
+            if not content.isdigit():
+                raise LexError(f"Erro na linha {i+1}: Caracteres inválidos na zona do label (colunas 1-5).")
+    return data
+
 def t_error(t): 
     raise LexError(f"Illegal character '{t.value[0]}' at line {t.lexer.lineno}")
 
