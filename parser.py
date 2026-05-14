@@ -259,7 +259,7 @@ def p_for_statement(p): # não é suppsto incluir os statements dentro do DO -> 
     end_type = parser.symbol_table.get_expr_type(end)
     step_type = parser.symbol_table.get_expr_type(step) if step is not None else  None  # default step type is INT
     
-    parser.symbol_table.register_goto_label(p[2])
+    parser.symbol_table.register_do_label(p[2])
     parser.symbol_table.check_do_loop(var_name, start_type, end_type, step_type)
 
     if len(p) == 8:
@@ -530,7 +530,7 @@ def p_assignment_array(p):
 
     parser.symbol_table.set_value(array_name, value, index[0])
 
-    p[0] = ('ASSIGN', array_name, index[0], p[3])
+    p[0] = ('ASSIGN', p[1], p[3])
 
 def p_program_header(p):
     r"""
@@ -625,8 +625,9 @@ parser.quit = False
 def get_ast(data, lexer):
     ast = parser.parse(data, lexer=lexer)
 
-    parser.symbol_table.verify_pending_gotos()
-    parser.symbol_table.verify_pending_calls()
+        parser.symbol_table.verify_pending_gotos()
+        parser.symbol_table.verify_pending_do_labels()
+        parser.symbol_table.verify_pending_calls()
 
     return ast, parser.symbol_table
         

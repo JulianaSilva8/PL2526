@@ -24,7 +24,7 @@ class SymbolTable:
         self.calls_to_verify = [] # para guardar as chamadas de funções/subrotinas que não estão na symbol table no momento da análise semântica, para verificar no final se estão declaradas
                                     # (node, symbol_table_entry)
         self.gotos_to_verify = [] # para guardar os GOTO targets que não estão na symbol table no momento da análise semântica, para verificar no final se estão declarados
-
+        self.do_labels_to_verify = [] 
     def __repr__(self):
         return self.__table.__repr__()
 
@@ -396,15 +396,21 @@ class SymbolTable:
             raise SemanticError(f"Undeclared variable: '{name}'.")
         if not self.__table[name]['is_array']:
             raise SemanticError(f"Variable '{name}' is not an array.")
-        if index is not None:
-            if isinstance(index, int):
-                size = self.__table[name]['size']
-                if index < 1 or index > size:
-                    raise SemanticError(f"Array index out of bounds for variable '{name}': {index} (size: {size}).")
-            else:
-                type = self.get_expr_type(index)
-                if type != 'INTEGER':
-                    raise SemanticError(f"Array index for variable '{name}' must be an integer.")
+        if index is None:
+            return
+        
+        if isinstance(index, int):
+            size = self.__table[name]['size']
+            if index < 1 or index > size:
+                raise SemanticError(
+                    f"Array index out of bounds for variable '{name}': {index} (size: {size})."
+                )
+            return
+        index_type = self.get_expr_type(index)
+        if index_type != 'INTEGER':
+            raise SemanticError(
+                f"Array index for variable '{name}' must be of type INTEGER, got {index_type}."
+            )
     
     def check_parameter_assignment(self, name):
         """Check if a parameter is being assigned a value after declaration."""
@@ -421,7 +427,7 @@ class SymbolTable:
             self.check_is_subroutine(name)
             self.check_call_args(name, [self.get_expr_type(arg) for arg in arglist])
         else:
-            self.calls_to_verify.append((node, self.get_current_scope_name()))
+            self.calls_to_verify.append((('CALL', name, arglist), self.get_current_scope_name()))
         
     def check_call_args(self, scope_name, args_types):
         """Verificar número e tipos dos argumentos numa chamada de função/subrotina."""
@@ -534,6 +540,34 @@ class SymbolTable:
             self.__table = self.__all_scopes[scope_name]['vars'] # mudar para a tabela do scope onde o GOTO foi declarado
             try:
                 self.check_label_exists(label)
+            except SemanticError as e:
+                errors.append(str(e))
+
+        self.__table = current_table # voltar à tabela original
+        
+        if errors:
+            raise SemanticError("\n".join(errors))
+        
+    def register_do_label(self, label):
+        self.do_labels_to_verify.append((self.get_current_scope_name(), label))
+
+    def check_valid_do_label(self, label):
+        label_key = f"__label_{label}"
+        label_info = self.__table[label_key]
+        stmt_type = label_info.get('statement')[0]
+        wrong_label = {'IF', 'DO', 'STOP', 'RETURN', 'PAUSE', 'END', 'ELSEIF', 'ELSE', 'ENDIF', 'THEN'}
+
+        if stmt_type in wrong_label:
+            raise SemanticError(f"Invalid terminal statement for DO label {label}: {stmt_type}.")
+        
+    def verify_pending_do_labels(self):
+        errors = []
+        current_table = self.__table # guardar a tabela atual para voltar a ela 
+
+        for scope_name, label in self.do_labels_to_verify:
+            self.__table = self.__all_scopes[scope_name]['vars'] # mudar para a tabela do scope onde o DO foi declarado
+            try:
+                self.check_valid_do_label(label)
             except SemanticError as e:
                 errors.append(str(e))
 
