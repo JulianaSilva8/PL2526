@@ -201,83 +201,104 @@ O `WRITE` também foi adicionado ao parser com suporte a um par de controlo, com
 
 ## 5. Análise Semântica
 
-A análise semântica é feita principalmente através da classe `SymbolTable`, definida em `symbol_table.py`. Esta estrutura mantém informação sobre variáveis, arrays, parâmetros, labels, funções, subrotinas e escopos.
+A análide semântica foi implementada principalmente através da classe `SymbolTable`, que guarda duas estruturas de dados principais: uma lista de escopos e uma tabela de símbolos. Os símbolos guardados como na tabela de símbolos incluem variáveis de tipos simples, arrays, parâmetros (as constantes definidas por `PARAMETER`), labels, parâmetros formais de funções e subrotinas e os valores de retorno de funções. A estrutura da tabela de símbolos corresponde a um dicionário onde as chaves são os nomes dos símbolos e os valores são objetos que guardam informação detalhada sobre cada símbolo. Esta informação encontra-se representada sobre a forma de um dicionário com os seguintes valores chave:
 
-Cada símbolo guarda informação como:
+<table>
+  <tr>
+    <td>index</td>
+    <td>Índice atribuído à variável sequencialmente consoante o parsing na análise sintática.</td>
+  </tr>
+   <tr>
+      <td>type</td>
+      <td>Tipo da variável (INTEGER, REAL, LOGICAL, CHARACTER, etc.).</td>
+   </tr>
+   <tr>
+      <td>initialized</td>
+      <td>Indica se a variável já foi inicializada.</td>
+   </tr>
+   <tr>
+      <td>is_array</td>
+      <td>Indica se a variável é um array.</td>
+   </tr>
+   <tr>
+      <td>size</td>
+      <td>Tamanho do array, caso seja um array.</td>
+   </tr>
+   <tr>
+      <td>is_parameter</td>
+      <td>Indica se a variável é um parâmetro constante definido por PARAMETER.</td>
+   </tr>
+   <tr>
+      <td>is_formal_param</td>
+      <td>Indica se a variável é um parâmetro formal de uma função ou subrotina.</td>
+   </tr>
+   <tr>
+      <td>is_return_value</td>
+      <td>Indica se a variável é o valor de retorno de uma função.</td>
+   </tr>
+   <tr>
+      <td>is_label</td>
+      <td>Indica se o símbolo é uma label.</td>
+   </tr>
+   <tr>
+      <td>value</td>
+      <td>Valor associado ao símbolo, quando aplicável (quando valor é uma constante e não calculado em tempo de execução).</td>
+   </tr> 
+</table>
 
-```text
-index             posição na memória
-type              tipo da variável
-initialized       indica se já foi inicializada
-is_array          indica se é array
-size              tamanho do array
-char_len          comprimento de CHARACTER
-is_parameter      indica se é constante PARAMETER
-is_formal_param   indica se é parâmetro formal
-is_label          indica se é label
-value             valor associado, quando aplicável
-```
 
-A tabela de símbolos suporta múltiplos escopos, nomeadamente o escopo global, escopos de programas, funções e subrotinas. Esta organização é importante porque funções e subrotinas têm os seus próprios parâmetros e variáveis locais.
+A lista de escopos está representada por duas estruturas: uma "stack" com os nomes dos escopos e um dicionário que mapeia cada nome de escopo para um dicionário contendo as seguintes informações:
 
-### 5.1. Verificação de declarações
+<table>
+  <tr>
+    <td>name</td>
+    <td>Nome do escopo</td>
+  </tr>
+   <tr>
+      <td>vars</td>
+      <td>Estrutura da tabela de símbolos associada ao escopo</td>
+   </tr>
+   <tr>
+      <td>Prev</td>
+      <td>Nome do escopo anterior</td>
+   </tr>
+   <tr>
+      <td>type</td>
+      <td>Tipo do escopo (programa, função, subrotina)</td>
+   </tr>
+   <tr>
+      <td>return_type</td>
+      <td>Tipo de retorno caso o escopo seja uma função</td>
+   </tr>
+   <tr>
+      <td>return_value_assigned</td>
+      <td>Indica se o valor de retorno da função já foi atribuído em algum ponto do código</td>
+   </tr>
+   <tr>
+      <td>return_address</td>
+      <td>Usado para as funções na fase de tradução</td>
+</table>
 
-Sempre que uma variável é usada, é verificado se foi previamente declarada. O compilador também deteta declarações duplicadas, uso de variáveis não inicializadas e tentativas de atribuir valores a constantes definidas por `PARAMETER`.
+O escopo global corresponde ao escopo usado para o programa principal. Quando se entra numa regra de produção de uma unidade de programa, mais especificamente nas regras de produção das headers para as funções e subrotinas, é chamada a função `push_scope` que guarda a tabela de símbolos do escopo anterior na lista de escopos e cria uma tabela nova vazia para o novo escopo. Quando se sai da regra de produção, é chamada a função `pop_scope` que guarda a tabela de símbolos no dicionário do escopo atual na lista de escopos e atualiza para o escopo anterior. Embora a implementação de escopos tenha sido feita sobre a forma de uma stack, esta estrutura acabou por não ser tão útil como esperado, uma vez que o Fortran 77 não tem suporte a blocos aninhados.
 
-Exemplo de erro semântico possível:
+Esta classe implementa várias funções que permitem fazer a verificação semântica do código, levantando uma exceção `SemanticError` quando é detetado um erro semântico. Estas funções são chamadas nas funções de produção do parser, o que permite fazer a verificação semântica durante a construção da AST. Nas verificações semânticas implementadas recorreu-se ao uso da função auxiliar `get_expr_type` que, dado um nodo da AST, usa recursividade para determinar o tipo de uma expressão, usando tipagem automática? para valores constantes e recorrenddo à tabela de símbolos para variáveis. A própria função levanta erros semânticos quando deteta incompatibilidades de tipos em operações ou uso de variáveis não declaradas ou inicializadas.
 
-```text
-Undeclared variable: X
-Duplicate declaration: N
-Cannot assign a value to parameter 'MAX' after declaration.
-```
 
-### 5.2. Verificação de tipos
+### 5.1. Verificação de declarações e acesso a variáveis
 
-A função `get_expr_type` determina o tipo de uma expressão. Esta função é usada para validar atribuições, condições de `IF`, expressões lógicas, operações relacionais, concatenação de strings e chamadas a funções.
+Sempre que uma variável é declarada é verificada se já existe no mesmo escopo uma variável com o mesmo nome ou se existe um escopo com o mesmo nome. O mesmo acontece para as labels e escopos. Quando uma variável é usada, é verificado se foi previamente declarada. O compilador também deteta o acesso a variáveis não inicializadas e tentativas de atribuir valores a constantes declaradas através do comadno `PARAMETER`.
 
-Por exemplo:
 
-```fortran
-LOGICAL FLAG
-FLAG = .TRUE.
-IF (FLAG) THEN
-   PRINT *, 'OK'
-ENDIF
-```
+### 5.2. Compatibilidade de tipos
 
-é válido, mas:
+Em todas as expressões, o compilador verifica a compatibilidade de tipos entre variáveis e literais, assim como a compatibilidade de tipos com as operações usadas. Como mencionado anteriormente, isto é feito através da função `get_expr_type`, que determina o tipo de uma expressão e levanta erros semânticos quando deteta incompatibilidades. Também é verificada a compatibilidade de tipos na atribuição de variáveis, em certas construções como o `IF`, onde a condição tem de ser do tipo `LOGICAL` e no acesso a arrays, onde o índice tem de ser do tipo `INTEGER` e, em casos em que pode ser obtido o valor do indíce em tempo de compilação, tem de estar dentro dos limites do array.
 
-```fortran
-INTEGER X
-IF (X) THEN
-   PRINT *, 'ERRO'
-ENDIF
-```
-
-deve originar erro, porque a condição de um `IF` tem de ser lógica.
-
-O código também valida compatibilidade entre tipos numéricos, permitindo algumas promoções entre `INTEGER`, `REAL` e `DOUBLE`, e aceita compatibilidade entre `STRING` e `CHARACTER` em atribuições ou concatenações.
-
-### 5.3. Verificação de labels e ciclos DO
+### 5.3. Validação de instruções de salto
 
 Os labels usados por `GOTO` e `DO` são registados para verificação posterior. No final da análise, o compilador verifica se todos os saltos apontam para labels existentes. Também é verificado se a variável de controlo do ciclo `DO` é inteira e se os limites do ciclo são numéricos.
 
-Esta verificação é importante para exemplos como:
-
-```fortran
-DO 10 I = 1, N
-   FAT = FAT * I
-10 CONTINUE
-```
-
-Neste caso, o label `10` deve existir e estar associado a uma instrução válida.
-
 ### 5.4. Verificação de funções e subrotinas
-
-O compilador suporta a declaração e chamada de `FUNCTION` e `SUBROUTINE`. As chamadas são verificadas quanto à existência da função/subrotina, ao número de argumentos e aos respetivos tipos.
-
-Quando uma função é chamada antes de ser totalmente conhecida, a verificação é adiada e guardada numa lista de chamadas pendentes. No final da análise, essas chamadas são validadas através de `verify_pending_calls`.
+Todas as funções e subrotinas têm de redeclarar os seus parâmetros formais dentro do seu escopo, para que seja possível obter os seus tipos. No fim da análise, é verificado se todas as funções e subrotinas chamadas foram declaradas, e se os parâmetros usados nas chamadas são compatíveis em número e tipo com os parâmetros formais declarados. No caso das funções, é verificado se em algum ponto do código é atribuído um valor de retorno à função antes do comando `RETURN`.
 
 ---
 
