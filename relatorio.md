@@ -1,52 +1,46 @@
 # Processamento de Linguagens - Compilador Fortran 77 para EWVM
+
 ## Trabalho realizado por:
+
 ### Juliana Silva A105572
+
 ### Sofia Couto A106925
+
 ### Soraia Pereira A106806
 
 ## Índice
+
 1. [Introdução](#1-introdução)
 2. [Estrutura do Projeto](#2-estrutura-do-projeto)
-3. [Análise Léxica](#3-análise-léxica)
+3. [Análise Léxica](#3-análise-léxica)                                                         // SOFIA
    - [3.1. Suporte ao formato fixo de Fortran 77](#31-suporte-ao-formato-fixo-de-fortran-77)
    - [3.2. Tipos de literais reconhecidos](#32-tipos-de-literais-reconhecidos)
-4. [Análise Sintática e Gramática](#4-análise-sintática-e-gramática)
+4. [Análise Sintática e Gramática](#4-análise-sintática-e-gramática)                           // SOFIA
    - [4.1. Declarações](#41-declarações)
-   - [4.2. Gramática implementada](#42-gramática-implementada) // +ASSOU DO 7 PARA AQUI. VER SE ORDEM DE TÓPICOS NO 4 FAZ SENTIDO!!!!
+   - [4.2. Gramática implementada](#42-gramática-implementada) // PASSOU DO 7 PARA AQUI. VER SE ORDEM DE TÓPICOS NO 4 FAZ SENTIDO!!!!
    - [4.3. Expressões](#42-expressões)
    - [4.4. Controlo de fluxo](#43-controlo-de-fluxo)
    - [4.5. Entrada e saída](#44-entrada-e-saída)
-5. [Análise Semântica](#5-análise-semântica)
+5. [Análise Semântica](#5-análise-semântica)                                                 // SORAIA
    - [5.1. Verificação de declarações](#51-verificação-de-declarações)
    - [5.2. Verificação de tipos](#52-verificação-de-tipos)
    - [5.3. Verificação de labels e ciclos DO](#53-verificação-de-labels-e-ciclos-do)
    - [5.4. Verificação de funções e subrotinas](#54-verificação-de-funções-e-subrotinas)
 6. [Tradução para Código EWVM](#6-tradução-para-código-ewvm)
-   - [6.1. Variáveis e memória](#61-variáveis-e-memória)
-   - [6.2. Expressões aritméticas](#62-expressões-aritméticas)
-   - [6.3. Expressões relacionais e lógicas](#63-expressões-relacionais-e-lógicas)
-   - [6.4. Entrada e saída](#64-entrada-e-saída)
-   - [6.5. Arrays](#65-arrays)
-   - [6.6. Ciclos DO](#66-ciclos-do)
-7. [Testes Realizados](#8-testes-realizados)
-8. [Dificuldades Encontradas](#9-dificuldades-encontradas)
-   - [9.1. Labels e formato fixo](#91-labels-e-formato-fixo)
-   - [9.2. Falta de separador explícito entre statements](#92-falta-de-separador-explícito-entre-statements)
-   - [9.3. Tipos CHARACTER e STRING](#93-tipos-character-e-string)
-   - [9.4. Arrays e indexação](#94-arrays-e-indexação)
-   - [9.5. Funções e subrotinas](#95-funções-e-subrotinas)
-9. [Limitações Atuais](#10-limitações-atuais)
+7. [Testes Realizados](#8-testes-realizados)                                                 // SORAIA
+8. [Dificuldades Encontradas e Limitações Atuais](#8-dificuldades-encontradas)
+9. [Otimizações implementadas](#9-dificuldades-encontradas)                                    // SOFIA
 10. [Instruções de Execução](#11-instruções-de-execução)
 11. [Conclusão](#12-conclusão)
 
-
 ## 1. Introdução
+
 Este projeto foi desenvolvido no âmbito da unidade curricular de Processamento de Linguagens e tem como objetivo a construção de um compilador para a linguagem **Fortran 77 Standard**. O compilador implementado recebe como entrada um ficheiro com código Fortran 77 e realiza as várias fases clássicas de compilação: análise léxica, análise sintática, análise semântica e tradução para código máquina da **EWVM**.
 
 No projeto desenvolvido, foi utilizada a biblioteca **PLY** em Python, nomeadamente os módulos `ply.lex` e `ply.yacc`, para implementar o analisador léxico e o analisador sintático.
 
-
 ## 2. Estrutura do Projeto
+
 A implementação foi organizada em vários ficheiros, cada um associado a uma fase ou responsabilidade específica do compilador:
 
 ```
@@ -67,6 +61,9 @@ A separação em módulos torna o projeto mais organizado: o `lexer.py` identifi
 ---
 
 ## 3. Análise Léxica
+
+### Mencionar que antes do lexer ser chamado é verificado se a identacao está correta
+
 A análise léxica foi implementada no ficheiro `lexer.py`, utilizando a biblioteca `ply.lex`. Esta fase tem como objetivo transformar o código fonte Fortran 77 numa sequência de tokens reconhecíveis pelo parser.
 
 Foram definidas as seguintes palavras reservadas:
@@ -74,13 +71,14 @@ Foram definidas as seguintes palavras reservadas:
 ```
 PROGRAM, END, IF, THEN, ELSE, ENDIF, DO, GOTO,
 PRINT, READ, INTEGER, REAL, LOGICAL, CHARACTER,
-FUNCTION, SUBROUTINE, CALL, RETURN, PARAMETER, 
+FUNCTION, SUBROUTINE, CALL, RETURN, PARAMETER,
 STOP, MOD, WRITE
 ```
 
 Além das palavras reservadas, o lexer reconhece identificadores, números inteiros, números reais, valores lógicos, strings, operadores aritméticos, operadores relacionais e operadores lógicos. No código, os tokens incluem, por exemplo, `LABEL`, `INT`, `NREAL`, `BOOL`, `LT`, `GT`, `LE`, `GE`, `EQ`, `NE`, `VAR`, `DOUBLE`, `AND`, `OR`, `NOT`, `STRING`, `POWER` e `CONCAT`.
 
-### 3.1. Suporte ao formato fixo de Fortran 77 ----------- VER ISTO 
+### 3.1. Suporte ao formato fixo de Fortran 77 ----------- VER ISTO
+
 Foi tomada a decisão de considerar parcialmente o formato de colunas fixas do Fortran 77. Em particular, os labels são reconhecidos quando aparecem nas primeiras colunas da linha, com um máximo de cinco dígitos. No lexer, quando é encontrado um número, é verificada a sua posição na linha para decidir se deve ser classificado como `LABEL` ou como `INT`.
 
 Também são ignoradas linhas de comentário iniciadas por `C`, `c` ou `*` na primeira coluna, de acordo com a sintaxe tradicional do Fortran 77.
@@ -285,166 +283,14 @@ Quando uma função é chamada antes de ser totalmente conhecida, a verificaçã
 
 ## 6. Tradução para Código EWVM
 
-A tradução para código máquina da EWVM é feita no ficheiro `translator.py`. Esta fase percorre a AST e gera instruções correspondentes para a máquina virtual.
+A tradução para código máquina da EWVM é feita no ficheiro `translator.py` e corresponde à fase final do compilador.
+Depois da análise léxica, sintática e semântica, é criado um objeto Translator com a symbol_table. Este objeto percorre a AST gerada pelo parser e a transforma cada nó numa lista de instruções em código máruina, que no fim é gravada no ficheiro `output.txt`. 
 
-O tradutor usa métodos específicos para cada tipo de nó, como:
+Dentro do `translator.py`, a classe Translator percorre cada unidade do programa, como PROGRAM, FUNCTION ou SUBROUTINE, chamando funções específicas como gen_program, gen_function e gen_subroutine. Depois, para cada nó da AST, identifica o seu tipo, por exemplo ASSIGN, IF, DO, PRINT, CALL ou operações aritméticas, e encaminha-o para o respetivo gerador de código.
 
-```text
-gen_program
-gen_assign
-gen_print
-gen_read
-gen_if
-gen_do
-gen_goto
-gen_call
-gen_function
-gen_subroutine
-gen_arithmetic
-gen_relational
-gen_logical
-gen_index_or_call
-```
+Durante este processo, o translator consulta a tabela de símbolos para obter informação sobre variáveis, tipos, índices e escopos. Também aloca memória para as variáveis e traduz expressões e instruções de Fortran77 para comandos da EWVM, como PUSHI, PUSHG, STOREG, JUMP, CALL, WRITEI, etc
 
-A função principal `translate` faz o despacho com base no primeiro elemento do tuplo da AST. Por exemplo, se o nó começar por `'ASSIGN'`, é chamada a função `gen_assign`; se começar por `'PRINT'`, é chamada `gen_print`.
-
-### 6.1. Variáveis e memória
-
-Cada variável recebe um índice na tabela de símbolos. Durante a tradução, esse índice é usado para gerar instruções como:
-
-```text
-PUSHI valor
-PUSHF valor
-PUSHS "texto"
-STOREG índice
-PUSHG índice
-```
-
-Por exemplo, a atribuição:
-
-```fortran
-X = 10
-```
-
-pode ser traduzida para algo semelhante a:
-
-```text
-PUSHI 10
-STOREG <índice de X>
-```
-
-Para variáveis reais, é usado `PUSHF`; para strings e caracteres, é usado `PUSHS`; para booleanos, são usados inteiros `1` e `0`.
-
-### 6.2. Expressões aritméticas
-
-As expressões aritméticas são traduzidas empilhando primeiro os operandos e depois aplicando a instrução correspondente:
-
-```fortran
-SOMA = SOMA + NUMS(I)
-```
-
-pode gerar uma sequência onde os valores são carregados para a stack e depois é aplicada a instrução `ADD`.
-
-O tradutor suporta operadores como:
-
-```text
-ADD, SUB, MUL, DIV, MOD, POW
-```
-
-### 6.3. Expressões relacionais e lógicas
-
-As expressões relacionais são traduzidas para instruções da EWVM como:
-
-```text
-INF      <
-SUP      >
-INFEQ    <=
-SUPEQ    >=
-EQUAL    ==
-NOT      negação
-```
-
-No caso de `.NE.`, o tradutor gera primeiro `EQUAL` e depois `NOT`, representando a operação “diferente de”.
-
-As expressões lógicas `.AND.` e `.OR.` são traduzidas para as instruções `AND` e `OR`.
-
-### 6.4. Entrada e saída
-
-A instrução `PRINT` é traduzida através de instruções de escrita da EWVM:
-
-```text
-WRITEI   escrita de inteiros
-WRITEF   escrita de reais
-WRITES   escrita de strings/caracteres
-```
-
-No caso de literais string, as aspas vindas do parser são removidas antes da geração do `PUSHS`, para que a string seja corretamente impressa. O tradutor também acrescenta uma quebra de linha no fim de cada `PRINT`.
-
-Exemplo:
-
-```fortran
-PRINT *, 'A soma dos numeros e: ', SOMA
-```
-
-pode gerar:
-
-```text
-PUSHS "A soma dos numeros e: "
-WRITES
-PUSHG <índice de SOMA>
-WRITEI
-PUSHS "\n"
-WRITES
-```
-
-O `READ` usa a instrução `READ`, seguida de conversões como `ATOI` ou `ATOF`, dependendo do tipo da variável lida. Para arrays, é calculado o endereço da posição pretendida e usado `STOREN`.
-
-### 6.5. Arrays
-
-Os arrays em Fortran começam no índice 1. Como a representação em memória da EWVM é tratada com base em endereços, o tradutor ajusta o índice subtraindo 1:
-
-```fortran
-NUMS(I)
-```
-
-é tratado como:
-
-```text
-endereço_base(NUMS) + (I - 1)
-```
-
-No tradutor, este comportamento aparece nas funções que tratam acessos a arrays e leituras para posições de array.
-
-### 6.6. Ciclos DO
-
-O ciclo `DO` é traduzido através de labels internos gerados automaticamente. O tradutor cria uma label de início e uma label de fim, inicializa a variável de controlo, verifica a condição de continuação e gera um salto condicional para sair do ciclo.
-
-Exemplo Fortran:
-
-```fortran
-DO 10 I = 1, N
-   FAT = FAT * I
-10 CONTINUE
-```
-
-Estrutura conceptual gerada:
-
-```text
-PUSHI 1
-STOREG I
-
-DO_10_START:
-PUSHG I
-PUSHG N
-INFEQ
-JZ DO_10_END
-
-...
-incremento de I
-JUMP DO_10_START
-
-DO_10_END:
-```
+Assim, o translator recebe a estrutura do programa já validada e produz o código máquina correspondente ao original em Fortran77.
 
 ---
 
@@ -517,17 +363,17 @@ A gramática produz uma AST simples baseada em tuplos Python, o que simplifica a
 
 ---
 
-## 8. Testes Realizados
+## 7. Testes Realizados
 
 Os testes foram baseados nos exemplos sugeridos no enunciado, nomeadamente:
 
-| Teste | Funcionalidade testada | Estado |
-|---|---|---|
-| `ex1.f` | `PROGRAM`, `PRINT`, string literal | Funciona / A validar |
-| `ex2.f` | `READ`, `DO`, `CONTINUE`, multiplicação | Funciona / A validar |
-| `ex3.f` | `IF`, `.AND.`, `MOD`, `GOTO`, booleanos | Funciona / A validar |
-| `ex4.f` | Arrays, leitura para array, soma acumulada | Funciona / Parcial |
-| `ex5.f` | `FUNCTION`, chamada de função, `RETURN` | Parcial / Em desenvolvimento |
+| Teste        | Funcionalidade testada                     | Estado                       |
+| ------------ | ------------------------------------------ | ---------------------------- |
+| `ex1.f`      | `PROGRAM`, `PRINT`, string literal         | Funciona / A validar         |
+| `ex2.f`      | `READ`, `DO`, `CONTINUE`, multiplicação    | Funciona / A validar         |
+| `ex3.f`      | `IF`, `.AND.`, `MOD`, `GOTO`, booleanos    | Funciona / A validar         |
+| `ex4.f`      | Arrays, leitura para array, soma acumulada | Funciona / Parcial           |
+| `ex5.f`      | `FUNCTION`, chamada de função, `RETURN`    | Parcial / Em desenvolvimento |
 | `ex8Sofia.f` | `CHARACTER`, `WRITE`, concatenação, lógica | Parcial / Em desenvolvimento |
 
 O enunciado recomenda a criação de programas Fortran de teste e respetivos ficheiros com código VM gerado, para validar a correção do compilador.
@@ -536,33 +382,19 @@ Para cada programa de teste foi executado o compilador, analisada a AST produzid
 
 ---
 
-## 9. Dificuldades Encontradas
+## 8. Dificuldades Encontradas e Limitações Atuais
 
-Durante o desenvolvimento surgiram várias dificuldades relacionadas com a aproximação entre a sintaxe original de Fortran 77 e a representação necessária para a EWVM.
+Durante o desenvolvimento do compilador, surgiram várias dificuldades principalmente devido às diferenças entre a linguagem Fortran77 e o código máquina da EWVM.
 
-### 9.1. Labels e formato fixo
+Uma parte desafiante foi a implementação das labels. Em Fortran77, as labels são usadas em instruções como GOTO e nos ciclos DO, podendo aparecer no início de linhas e estar associadas ou não a instruções como CONTINUE. Foi necessário garantir que estas labels eram reconhecidas corretamente, guardadas na tabela de símbolos e depois traduzidas para labels válidas em código EWVM.
 
-Uma dificuldade inicial foi distinguir números comuns de labels. Em Fortran 77, os labels aparecem nas primeiras colunas da linha, enquanto números usados em expressões podem surgir em qualquer posição. Para resolver este problema, o lexer verifica a coluna onde o número aparece e classifica-o como `LABEL` apenas quando está nas primeiras cinco colunas.
+Outra dificuldade importante foi a implementação de funções e subrotinas. Foi necessário tratar diferentes escopos, parâmetros formais, chamadas com argumentos, valores de retorno e a passagem correta de informação através da pilha. No caso das funções, a análise semântica verifica se em algum ponto é atribuído um valor de retorno à função antes do RETURN. No entanto, esta verificação ainda é limitada, porque não analisa todos os caminhos possíveis de execução. 
 
-### 9.2. Falta de separador explícito entre statements
+A implementação de arrays também trouxe dificultades sobretudo devido à diferença de indexação entre Fortran77 e a EWVM. Em Fortran77, os arrays começam no índice 1, enquanto na EWVM a indexação usada na memória começa em 0. Por isso, sempre que é feito um acesso a um array, foi necessário gerar código extra para converter o índice, subtraindo 1 ao valor usado no programa original.
 
-Outra dificuldade foi o facto de o parser não usar um token explícito de fim de linha. Como consequência, algumas regras podem tornar-se ambíguas, especialmente em instruções como `WRITE`, que podem ter argumentos opcionais. Isto pode originar conflitos `shift/reduce`, porque o parser tem dificuldade em decidir se o token seguinte pertence ao statement atual ou se inicia um novo statement.
+Também existiram limitações nas instruções de entrada e saída, como o PRINT, READ e WRITE. O PRINT e o READ foram implementados de forma funcional mas ainda com limitações, especialmente no suporte a formatos mais complexos. Já o WRITE não foi implementado, uma vez que a sua sintaxe causava conflitos shift/reduce no parser. Para resolver este conflito, seria preciso realizar alterações significativas na gramática e em várias partes do projeto. Po isso, optou-se por limitar o compilador nesse sentido e focar na implementação de outras funcionalidades e otimizações igualmente importantes.
 
-Uma possível melhoria futura seria introduzir um token de fim de linha ou pré-processar o código Fortran para normalizar as linhas antes da análise sintática.
-
-### 9.3. Tipos CHARACTER e STRING
-
-O tratamento de `CHARACTER` exigiu uma distinção entre caracteres de comprimento 1 e strings maiores. No lexer, as strings mantêm as aspas para permitir distinguir literais de identificadores durante a análise semântica.
-
-Na análise semântica, foi necessário permitir compatibilidade entre `CHARACTER` e `STRING`, especialmente em atribuições e concatenações. No tradutor, por outro lado, foi necessário remover as aspas antes de gerar instruções `PUSHS`.
-
-### 9.4. Arrays e indexação
-
-Fortran usa arrays com índice inicial 1, enquanto a implementação em memória da EWVM exige cálculo de endereços. Por isso, em acessos como `NUMS(I)`, foi necessário converter o índice para base 0, usando a expressão `I - 1`.
-
-### 9.5. Funções e subrotinas
-
-O suporte a `FUNCTION` e `SUBROUTINE` exigiu a criação de escopos próprios, verificação de parâmetros formais e validação de chamadas. Como algumas funções podem ser chamadas antes de serem completamente processadas, foi necessário guardar chamadas pendentes e verificá-las no final da análise.
+Assim, apesar do compilador já conseguir traduzir vários programas simples em Fortran77 para código máquina EWVM, ainda existem algumas limitações. No entanto, consideramos que foram superadas várias dificuldades ao longo da realização do projeto, o que nos permitiu compreender melhor o funcionamento de um compilador e a sintaxe de uma linguagem que não conhecíamos.
 
 ---
 
