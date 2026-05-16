@@ -20,7 +20,7 @@
    - [4.3. Construção da Árvore de Sintaxe Abstrata (AST)](#43-construção-da-árvore-de-sintaxe-abstrata-ast)
 5. [Análise Semântica](#5-análise-semântica)
 6. [Tradução para Código EWVM](#6-tradução-para-código-ewvm)
-7. [Testes Realizados](#7-testes-realizados)
+7. [Testes Realizados](#7-testes-realizados) # SOFIA
 8. [Dificuldades Encontradas e Limitações Atuais](#8-dificuldades-encontradas-e-limitações-atuais)
 9. [Otimizações implementadas](#9-otimizações-implementadas)
    - [9.1. Constant Folding](#91-constant-folding)
@@ -28,7 +28,7 @@
    - [9.3. Remoção de Ciclos Mortos](#93-remoção-de-ciclos-mortos)
    - [9.4. Eliminação de Dupla Negação](#94-eliminação-de-dupla-negação)
 10. [Instruções de Execução](#10-instruções-de-execução)
-11. [Conclusão](#11-conclusão)
+11. [Conclusão](#11-conclusão) # SOFIA
 
 ## 1. Introdução
 
@@ -211,21 +211,26 @@ Assim, o translator recebe a estrutura do programa já validada e produz o códi
 ---
 
 ## 7. Testes Realizados
+Para além dos testes presentes no enunciado, foram acrescentados mais testes para validar novas implementações. Na tabela abaixo é possível verificar que funcionalidade ou erro específico o ficheiro quer testar.
 
-Os testes foram baseados nos exemplos sugeridos no enunciado, nomeadamente:
+| Teste      | Funcionalidade/ Erro testado               |
+| ---------- | ------------------------------------------ |
+| `ex1.f`    | `PROGRAM`, `PRINT`, string literal         |
+| `ex2.f`    | `READ`, `DO`, `CONTINUE` com label, multiplicação     |
+| `ex3.f`    | `IF`/`THEN`/`ENDIF`, `.AND.`, `.TRUE.`/`.FALSE.`, `MOD`, `GOTO`, variável `LOGICAL`    |
+| `ex4.f`    | Arrays, leitura para array com `DO`, soma acumulada |
+| `ex5.f`    | `FUNCTION`, chamada de função, `RETURN`, comentários com C, `MOD`, `GOTO`    |
+| `ex6.f`    | `IF`/`ELSE`/`ENDIF` aninhados, variáveis `INTEGER` e `LOGICAL`, comparações |
+| `ex7.f`    | `REAL`, `.NE.`, variável `LOGICAL`, operações aritméticas |
+| `ex8.f`    | Comentários (C, *), constantes `REAL`/científicas, `PARAMETER`, concatenação, continuação de linha, **, `STOP` |
+| `ex9.f`    | `SUBROUTINE`, `CALL`, passagem de argumentos, `RETURN`, `STOP` |
+| `ex10.f`   | Array de inteiros, atribuição de strings, `DO` com label na mesma linha do corpo, `PRINT`, STOP |
 
-| Teste        | Funcionalidade testada                     | Estado                       |
-| ------------ | ------------------------------------------ | ---------------------------- |
-| `ex1.f`      | `PROGRAM`, `PRINT`, string literal         | Funciona / A validar         |
-| `ex2.f`      | `READ`, `DO`, `CONTINUE`, multiplicação    | Funciona / A validar         |
-| `ex3.f`      | `IF`, `.AND.`, `MOD`, `GOTO`, booleanos    | Funciona / A validar         |
-| `ex4.f`      | Arrays, leitura para array, soma acumulada | Funciona / Parcial           |
-| `ex5.f`      | `FUNCTION`, chamada de função, `RETURN`    | Parcial / Em desenvolvimento |
-| `ex8Sofia.f` | `CHARACTER`, `WRITE`, concatenação, lógica | Parcial / Em desenvolvimento |
+Para além destes testes foram criados mais 25 ficheiros de testes para verificar o lançamento correto de erros. Para estas verificações foram criados ficheiros com código em Fortran 77 com erros propositados, como a utilização de labels não existentes ou tentar dar valores a constantes. Os ficheiros de teste de erros encontram-se no diretório `errors` e o seu nome descreve o erro a testar.
 
-O enunciado recomenda a criação de programas Fortran de teste e respetivos ficheiros com código VM gerado, para validar a correção do compilador.
+Finalmente, foram criados ficheiros de teste para as otimizações implementadas, explícitas no capítulo 9. Para estes testes é possível verificar o seu sucesso através de dois métodos. O primeiro e mais rápido é observar o terminal onde se correr o compilador e esperar por mensagens de sucesso e o segundo é verificar no código máquina se os comandos certos aparecem.
 
-Para cada programa de teste foi executado o compilador, analisada a AST produzida e comparado o comportamento do código EWVM gerado com o resultado esperado. Os testes permitiram validar progressivamente cada construção da linguagem, começando por programas simples com `PRINT` e evoluindo para exemplos com ciclos, arrays, funções e expressões compostas.
+Para cada programa de teste foi executado o compilador, analisada a AST produzida e comparado o comportamento do código EWVM gerado com o resultado esperado.
 
 ---
 
