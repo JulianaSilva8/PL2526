@@ -19,20 +19,16 @@
    - [4.2. Hierarquia de Expressões](#42-hierarquia-de-expressões)
    - [4.3. Construção da Árvore de Sintaxe Abstrata (AST)](#43-construção-da-árvore-de-sintaxe-abstrata-ast)
 5. [Análise Semântica](#5-análise-semântica)
-   - [5.1. Verificação de declarações](#51-verificação-de-declarações)
-   - [5.2. Verificação de tipos](#52-verificação-de-tipos)
-   - [5.3. Verificação de labels e ciclos DO](#53-verificação-de-labels-e-ciclos-do)
-   - [5.4. Verificação de funções e subrotinas](#54-verificação-de-funções-e-subrotinas)
 6. [Tradução para Código EWVM](#6-tradução-para-código-ewvm)
-7. [Testes Realizados](#8-testes-realizados)
+7. [Testes Realizados](#7-testes-realizados)
 8. [Dificuldades Encontradas e Limitações Atuais](#8-dificuldades-encontradas-e-limitações-atuais)
 9. [Otimizações implementadas](#9-otimizações-implementadas)
    - [9.1. Constant Folding](#91-constant-folding)
    - [9.2. Eliminação de Código Morto](#92-eliminação-de-código-morto)
    - [9.3. Remoção de Ciclos Mortos](#93-remoção-de-ciclos-mortos)
    - [9.4. Eliminação de Dupla Negação](#94-eliminação-de-dupla-negação)
-10. [Instruções de Execução](#11-instruções-de-execução)
-11. [Conclusão](#12-conclusão)
+10. [Instruções de Execução](#10-instruções-de-execução)
+11. [Conclusão](#11-conclusão)
 
 ## 1. Introdução
 
@@ -174,104 +170,30 @@ gera a seguinte AST:
 
 ## 5. Análise Semântica
 
-A análide semântica foi implementada principalmente através da classe `SymbolTable`, que guarda duas estruturas de dados principais: uma lista de escopos e uma tabela de símbolos. Os símbolos guardados como na tabela de símbolos incluem variáveis de tipos simples, arrays, parâmetros (as constantes definidas por `PARAMETER`), labels, parâmetros formais de funções e subrotinas e os valores de retorno de funções. A estrutura da tabela de símbolos corresponde a um dicionário onde as chaves são os nomes dos símbolos e os valores são objetos que guardam informação detalhada sobre cada símbolo. Esta informação encontra-se representada sobre a forma de um dicionário com os seguintes valores chave:
+Depois da análise léxica e sintática, foi implementada a análise semântica que verifica se o programa contém erros semânticos. Ou seja, mesmo que o código esteja correto em termos de gramática, esta fase garante que as instruções fazem sentido em termos de declarações, tipos, inicializações, escopos e utilização de identificadores.
 
-<table>
-  <tr>
-    <td>index</td>
-    <td>Índice atribuído à variável sequencialmente consoante o parsing na análise sintática.</td>
-  </tr>
-   <tr>
-      <td>type</td>
-      <td>Tipo da variável (INTEGER, REAL, LOGICAL, CHARACTER, etc.).</td>
-   </tr>
-   <tr>
-      <td>initialized</td>
-      <td>Indica se a variável já foi inicializada.</td>
-   </tr>
-   <tr>
-      <td>is_array</td>
-      <td>Indica se a variável é um array.</td>
-   </tr>
-   <tr>
-      <td>size</td>
-      <td>Tamanho do array, caso seja um array.</td>
-   </tr>
-   <tr>
-      <td>is_parameter</td>
-      <td>Indica se a variável é um parâmetro constante definido por PARAMETER.</td>
-   </tr>
-   <tr>
-      <td>is_formal_param</td>
-      <td>Indica se a variável é um parâmetro formal de uma função ou subrotina.</td>
-   </tr>
-   <tr>
-      <td>is_return_value</td>
-      <td>Indica se a variável é o valor de retorno de uma função.</td>
-   </tr>
-   <tr>
-      <td>is_label</td>
-      <td>Indica se o símbolo é uma label.</td>
-   </tr>
-   <tr>
-      <td>value</td>
-      <td>Valor associado ao símbolo, quando aplicável (quando valor é uma constante e não calculado em tempo de execução).</td>
-   </tr> 
-</table>
+Para isso, foi implementada uma Symbol Table, que guarda a informação dos identificadores encontrados ao longo do programa, como variáveis, constantes, arrays, funções, subrotinas e labels. No nosso projeto, cada símbolo é registado com informação relevante para realizar a validação semântica, nomeadamente o seu índice, tipo, estado de inicialização, tamanho (para o caso dos arrays) e ainda flags que indicam se o símbolo corresponde a um PARAMETER, argumento formal, valor de retorno de uma função ou label:
 
+```
+self.__table[name] = {
+    'index': idx,
+    'type': var_type,
+    'initialized': False,
+    'is_array': is_array,
+    'size': size,
+    'is_parameter': is_parameter,
+    'is_formal_param': is_formal_param,
+    'is_return_value': is_return_value,
+    'is_label': is_label,
+    'value': value
+}
+```
 
-A lista de escopos está representada por duas estruturas: uma "stack" com os nomes dos escopos e um dicionário que mapeia cada nome de escopo para um dicionário contendo as seguintes informações:
+Esta estrutura permite centralizar várias verificações importantes. Por exemplo, quando uma variável é declarada, a Symbol Table verifica se já existe uma declaração com o mesmo nome no escopo atual, evitando declarações duplicadas. Quando é feita uma atribuição, verifica-se se a variável foi previamente declarada, se não corresponde a uma constante definida por PARAMETER, e se o tipo do valor atribuído é compatível com o tipo da variável. No caso dos arrays, também é verificado se o acesso é feito com um índice válido e do tipo inteiro. 
 
-<table>
-  <tr>
-    <td>name</td>
-    <td>Nome do escopo</td>
-  </tr>
-   <tr>
-      <td>vars</td>
-      <td>Estrutura da tabela de símbolos associada ao escopo</td>
-   </tr>
-   <tr>
-      <td>Prev</td>
-      <td>Nome do escopo anterior</td>
-   </tr>
-   <tr>
-      <td>type</td>
-      <td>Tipo do escopo (programa, função, subrotina)</td>
-   </tr>
-   <tr>
-      <td>return_type</td>
-      <td>Tipo de retorno caso o escopo seja uma função</td>
-   </tr>
-   <tr>
-      <td>return_value_assigned</td>
-      <td>Indica se o valor de retorno da função já foi atribuído em algum ponto do código</td>
-   </tr>
-   <tr>
-      <td>return_address</td>
-      <td>Usado para as funções na fase de tradução</td>
-</table>
+A análise semântica também trata da criação de escopos (programa principal, funções e subrotinas). Sempre que o compilador entra numa função ou subrotina, é criado um novo escopo na Symbol Table, sendo que quando esse bloco termina, o compilador regressa ao escopo anterior. Desta forma, cada escopo mantém a sua própria informação semântica, o que é essencial para gerar o código máquina corretamente.
 
-O escopo global corresponde ao escopo usado para o programa principal. Quando se entra numa regra de produção de uma unidade de programa, mais especificamente nas regras de produção das headers para as funções e subrotinas, é chamada a função `push_scope` que guarda a tabela de símbolos do escopo anterior na lista de escopos e cria uma tabela nova vazia para o novo escopo. Quando se sai da regra de produção, é chamada a função `pop_scope` que guarda a tabela de símbolos no dicionário do escopo atual na lista de escopos e atualiza para o escopo anterior. Embora a implementação de escopos tenha sido feita sobre a forma de uma stack, esta estrutura acabou por não ser tão útil como esperado, uma vez que o Fortran 77 não tem suporte a blocos aninhados.
-
-Esta classe implementa várias funções que permitem fazer a verificação semântica do código, levantando uma exceção `SemanticError` quando é detetado um erro semântico. Estas funções são chamadas nas funções de produção do parser, o que permite fazer a verificação semântica durante a construção da AST. Nas verificações semânticas implementadas recorreu-se ao uso da função auxiliar `get_expr_type` que, dado um nodo da AST, usa recursividade para determinar o tipo de uma expressão, usando tipagem automática? para valores constantes e recorrenddo à tabela de símbolos para variáveis. A própria função levanta erros semânticos quando deteta incompatibilidades de tipos em operações ou uso de variáveis não declaradas ou inicializadas.
-
-
-### 5.1. Verificação de declarações e acesso a variáveis
-
-Sempre que uma variável é declarada é verificada se já existe no mesmo escopo uma variável com o mesmo nome ou se existe um escopo com o mesmo nome. O mesmo acontece para as labels e escopos. Quando uma variável é usada, é verificado se foi previamente declarada. O compilador também deteta o acesso a variáveis não inicializadas e tentativas de atribuir valores a constantes declaradas através do comadno `PARAMETER`.
-
-
-### 5.2. Compatibilidade de tipos
-
-Em todas as expressões, o compilador verifica a compatibilidade de tipos entre variáveis e literais, assim como a compatibilidade de tipos com as operações usadas. Como mencionado anteriormente, isto é feito através da função `get_expr_type`, que determina o tipo de uma expressão e levanta erros semânticos quando deteta incompatibilidades. Também é verificada a compatibilidade de tipos na atribuição de variáveis, em certas construções como o `IF`, onde a condição tem de ser do tipo `LOGICAL` e no acesso a arrays, onde o índice tem de ser do tipo `INTEGER` e, em casos em que pode ser obtido o valor do indíce em tempo de compilação, tem de estar dentro dos limites do array.
-
-### 5.3. Validação de instruções de salto
-
-Os labels usados por `GOTO` e `DO` são registados para verificação posterior. No final da análise, o compilador verifica se todos os saltos apontam para labels existentes. Também é verificado se a variável de controlo do ciclo `DO` é inteira e se os limites do ciclo são numéricos.
-
-### 5.4. Verificação de funções e subrotinas
-Todas as funções e subrotinas têm de redeclarar os seus parâmetros formais dentro do seu escopo, para que seja possível obter os seus tipos. No fim da análise, é verificado se todas as funções e subrotinas chamadas foram declaradas, e se os parâmetros usados nas chamadas são compatíveis em número e tipo com os parâmetros formais declarados. No caso das funções, é verificado se em algum ponto do código é atribuído um valor de retorno à função antes do comando `RETURN`.
+Em suma, esta fase garante que a AST gerada pelo parser está semanticamente correta antes de ser traduzida para instruções EWVM, evitando erros na fase de geração de código.
 
 ---
 
@@ -397,65 +319,28 @@ Com a otimização:
 
 ---
 
-## 10. Limitações Atuais
-
-A versão atual do compilador já reconhece várias construções importantes de Fortran 77, mas ainda apresenta algumas limitações:
-
-- O suporte a `WRITE` ainda é aproximado ao comportamento de `PRINT`.
-- `FORMAT` não é totalmente interpretado; por enquanto é sobretudo reconhecido sintaticamente.
-- O tratamento de continuação de linhas ainda pode ser melhorado.
-- Algumas instruções de tradução de funções/subrotinas ainda precisam de validação completa.
-- O fecho de ciclos `DO` através de `CONTINUE` pode exigir lógica adicional no tradutor.
-- A gestão de arrays em atribuições ainda pode ser melhorada.
-- A otimização de código ainda não foi implementada de forma significativa.
-
-Apesar destas limitações, a estrutura do compilador permite evoluir facilmente cada uma das fases, uma vez que a análise léxica, análise sintática, análise semântica e tradução se encontram separadas em módulos distintos.
-
----
-
-## 11. Instruções de Execução
+## 10. Instruções de Execução
 
 Para executar o compilador, é necessário ter Python instalado e instalar a biblioteca PLY:
-
 ```bash
 pip install ply
 ```
 
-Para testar apenas o lexer:
-
+1. Para executar é necessário estar na diretoria `<project_dir>`, onde se encontra o ficheiro `main.py`.
+2. Para executar o compilador e gerar o ficheiro `output.txt` com o código máquina EWVM, deve ser passado como argumento o ficheiro Fortran77:
 ```bash
-python3 lexer.py exemplos/ex1.f
+python3 main.py <ficheiro.f>
 ```
 
-Para executar o parser e obter a AST:
-
+3. Para correr o script de testes, pode ser necessário dar permissões de execução `chmod +x`
 ```bash
-python3 parser.py exemplos/ex1.f
+chmod +x test_error_detection.sh
+./test_error_detection.sh
 ```
-
-Quando a fase de tradução estiver ligada ao parser, o comando esperado poderá ser:
-
-```bash
-python3 parser.py exemplos/ex1.f > exemplos/ex1.vm
-```
-
-ou, caso exista um ficheiro principal próprio:
-
-```bash
-python3 compiler.py exemplos/ex1.f exemplos/ex1.vm
-```
-
-Depois, o código gerado pode ser executado na EWVM com o comando definido pela máquina virtual disponibilizada pela unidade curricular, por exemplo:
-
-```bash
-java -jar ewvm.jar exemplos/ex1.vm
-```
-
-Este último comando deve ser adaptado ao nome real da VM utilizada.
 
 ---
 
-## 12. Conclusão
+## 11. Conclusão
 
 Neste projeto foi desenvolvido um compilador parcial para Fortran 77, capaz de realizar análise léxica, análise sintática, análise semântica e geração de código para a EWVM. A implementação foi feita em Python com recurso à biblioteca PLY, seguindo uma arquitetura modular dividida em lexer, parser, tabela de símbolos e tradutor.
 
