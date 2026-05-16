@@ -347,8 +347,12 @@ chmod +x test_error_detection.sh
 
 ## 11. Conclusão
 
-Neste projeto foi desenvolvido um compilador parcial para Fortran 77, capaz de realizar análise léxica, análise sintática, análise semântica e geração de código para a EWVM. A implementação foi feita em Python com recurso à biblioteca PLY, seguindo uma arquitetura modular dividida em lexer, parser, tabela de símbolos e tradutor.
+O desenvolvimento deste compilador permitiu concretizar a conceção e implementação de uma ferramenta capaz de traduzir um subconjunto da linguagem Fortran 77 para o código máquina da EWVM. Ao longo do projeto, foram consolidadas de forma prática as várias fases que compõem a arquitetura de um compilador, desde a análise léxica até à geração de código final.
 
-O compilador suporta declarações de variáveis, arrays, tipos básicos, expressões aritméticas, lógicas e relacionais, estruturas condicionais, ciclos `DO`, saltos com `GOTO`, operações de entrada/saída e suporte inicial a funções e subrotinas. A tabela de símbolos permite validar declarações, inicializações, tipos, labels e chamadas a subprogramas, contribuindo para uma análise semântica mais robusta.
+A gramática foi capaz de resolver de forma elegante a precedência de operadores e de lidar com ambiguidades sintáticas intrínsecas ao Fortran 77, como a distinção entre acessos a arrays e chamadas de funções, cuja resolução passou a ser responsabilidade da fase de análise semântica. A conceção da Tabela de Símbolos assumiu um papel central na arquitetura do sistema por garantir uma validação rigorosa de tipos, escopos e inicializações, e também por servir de fundação para a tradução e alocação de memória na máquina virtual.
 
-Embora existam ainda limitações, nomeadamente no suporte completo a `FORMAT`, `WRITE`, continuação de linhas e algumas partes da tradução de subprogramas, a base implementada cumpre a estrutura essencial de um compilador e permite a evolução incremental para suportar mais funcionalidades da linguagem Fortran 77.
+Ainda foi possível a implementação de otimizações como constant folding, eliminação de código morto, remoção de ciclos estéreis e simplificação de dupla negação. Estas otimizações demonstraram um impacto direto na redução do número de instruções geradas, resultando num código máquina EWVM mais compacto e, consequentemente, com menor gasto de memória e um tempo de execução menor.
+
+Naturalmente, foram encontrada algumas limitações, como o suporte incompleto a WRITE e a ausência de diretivas FORMAT. Estas limitações são decorrentes, sobretudo, da necessidade de reestruturação profunda do código e ao tempo necessário para a implementação correta.
+
+Ainda assim, o trabalho desenvolvido cumpriu os objetivos propostos e permitiu consolidar conhecimentos fundamentais sobre o funcionamento interno de um compilador, desde a tokenização do código-fonte até à geração de instruções para uma máquina virtual, bem como aprofundar o conhecimento sobre uma linguagem que era inicialmente desconhecida pelo grupo.
