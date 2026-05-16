@@ -357,8 +357,12 @@ Para o código
           X = 20
       ENDIF
 ```
+seria gerado:
+
+`PUSHI 0` -> `JZ IF1ELSE` -> `PUSHI 10` -> `STOREG 0` -> `JUMP IF1END` -> `IF1ELSE:` -> `PUSHI 20` -> `STOREG 0` -> `IF1END:`
+
 é apenas gerado 
-`PUSHI 20` -> `STOREG 0`
+`PUSHI 0` -> `JZ IF1ELSE` -> `IF1ELSE` -> `PUSHI 20` -> `STOREG 0`
 
 ### 9.3. Remoção de Ciclos Mortos
 A remoção de ciclos mortos deteta loops DO que nunca chegam a realizar uma única iteração. Ao analisar as instruções de um ciclo, o tradutor compara o limite inicial com o limite final fornecido e tem em consideração a direção do step.
@@ -385,10 +389,10 @@ Para o código
       IF (.NOT. (.NOT. FLAG)) THEN
 ```
 Sem otimizações, seria gerado:
-`PUSHG 0` -> `NOT` -> `NOT` -> `JZ label_else`
+`PUSHG 2` -> `NOT` -> `NOT` -> `JZ IF2END`
 
 Com a otimização:
-`PUSHG 0` -> `JZ label_else`
+`PUSHG 2` -> `JZ IF2END`
 
 
 ---
