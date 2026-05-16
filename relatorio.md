@@ -18,13 +18,13 @@
    - [4.1. Declarações e Tipos](#41-declarações-e-tipos)
    - [4.2. Hierarquia de Expressões](#42-hierarquia-de-expressões)
    - [4.3. Construção da Árvore de Sintaxe Abstrata (AST)](#43-construção-da-árvore-de-sintaxe-abstrata-ast)
-5. [Análise Semântica](#5-análise-semântica)                                                 // SORAIA
+5. [Análise Semântica](#5-análise-semântica)
    - [5.1. Verificação de declarações](#51-verificação-de-declarações)
    - [5.2. Verificação de tipos](#52-verificação-de-tipos)
    - [5.3. Verificação de labels e ciclos DO](#53-verificação-de-labels-e-ciclos-do)
    - [5.4. Verificação de funções e subrotinas](#54-verificação-de-funções-e-subrotinas)
 6. [Tradução para Código EWVM](#6-tradução-para-código-ewvm)
-7. [Testes Realizados](#8-testes-realizados)                                                 // SORAIA
+7. [Testes Realizados](#8-testes-realizados)
 8. [Dificuldades Encontradas e Limitações Atuais](#8-dificuldades-encontradas-e-limitações-atuais)
 9. [Otimizações implementadas](#9-otimizações-implementadas)
    - [9.1. Constant Folding](#91-constant-folding)
