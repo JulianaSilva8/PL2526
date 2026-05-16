@@ -12,15 +12,12 @@
 
 1. [Introdução](#1-introdução)
 2. [Estrutura do Projeto](#2-estrutura-do-projeto)
-3. [Análise Léxica](#3-análise-léxica)                                                         // SOFIA
-   - [3.1. Suporte ao formato fixo de Fortran 77](#31-suporte-ao-formato-fixo-de-fortran-77)
-   - [3.2. Tipos de literais reconhecidos](#32-tipos-de-literais-reconhecidos)
-4. [Análise Sintática e Gramática](#4-análise-sintática-e-gramática)                           // SOFIA
-   - [4.1. Declarações](#41-declarações)
-   - [4.2. Gramática implementada](#42-gramática-implementada) // PASSOU DO 7 PARA AQUI. VER SE ORDEM DE TÓPICOS NO 4 FAZ SENTIDO!!!!
-   - [4.3. Expressões](#42-expressões)
-   - [4.4. Controlo de fluxo](#43-controlo-de-fluxo)
-   - [4.5. Entrada e saída](#44-entrada-e-saída)
+3. [Análise Léxica](#3-análise-léxica)
+   - [3.1. Palavras Reservadas e Tokens](#31-palavras-reservadas-e-tokens)
+4. [Análise Sintática e Gramática](#4-análise-sintática-e-gramática)
+   - [4.1. Declarações e Tipos](#41-declarações-e-tipos)
+   - [4.2. Hierarquia de Expressões](#42-hierarquia-de-expressões)
+   - [4.3. Construção da Árvore de Sintaxe Abstrata (AST)](#43-construção-da-árvore-de-sintaxe-abstrata-ast)
 5. [Análise Semântica](#5-análise-semântica)                                                 // SORAIA
    - [5.1. Verificação de declarações](#51-verificação-de-declarações)
    - [5.2. Verificação de tipos](#52-verificação-de-tipos)
@@ -28,8 +25,12 @@
    - [5.4. Verificação de funções e subrotinas](#54-verificação-de-funções-e-subrotinas)
 6. [Tradução para Código EWVM](#6-tradução-para-código-ewvm)
 7. [Testes Realizados](#8-testes-realizados)                                                 // SORAIA
-8. [Dificuldades Encontradas e Limitações Atuais](#8-dificuldades-encontradas)
-9. [Otimizações implementadas](#9-dificuldades-encontradas)                                    // SOFIA
+8. [Dificuldades Encontradas e Limitações Atuais](#8-dificuldades-encontradas-e-limitações-atuais)
+9. [Otimizações implementadas](#9-otimizações-implementadas)
+   - [9.1. Constant Folding](#91-constant-folding)
+   - [9.2. Eliminação de Código Morto](#92-eliminação-de-código-morto)
+   - [9.3. Remoção de Ciclos Mortos](#93-remoção-de-ciclos-mortos)
+   - [9.4. Eliminação de Dupla Negação](#94-eliminação-de-dupla-negação)
 10. [Instruções de Execução](#11-instruções-de-execução)
 11. [Conclusão](#12-conclusão)
 
@@ -62,140 +63,112 @@ A separação em módulos torna o projeto mais organizado: o `lexer.py` identifi
 
 ## 3. Análise Léxica
 
-### Mencionar que antes do lexer ser chamado é verificado se a identacao está correta
+A análise léxica foi implementada com a biblioteca `PLY` que gera um analisador léxico a partir de expressoes regulares. O lexer percorre o código-fonte em  Fortran77 e produz sequências de tokens.
 
-A análise léxica foi implementada no ficheiro `lexer.py`, utilizando a biblioteca `ply.lex`. Esta fase tem como objetivo transformar o código fonte Fortran 77 numa sequência de tokens reconhecíveis pelo parser.
+É importante mencionar que antes de iniciar a tokenização, é feita uma validação da identação de código através da função `check_identation()`. Esta função é responsável por verificar que o código segue as regras do Fortran77:
+   - Comentários: Identifica linhas que comecem em `C`, `c` ou `*` e ignora-as;
+   - Labels: entre as colunas 1 e 5 só são aceites inteiros, que correspondem ao token `LABEL`. Se a função detetar que nesse espaço estão caracteres que nao sejam digitos lança um `LexError`.
 
-Foram definidas as seguintes palavras reservadas:
+### 3.1. Palavras Reservadas e Tokens
+Os tokens são todas as unidades léxicas que o lexer pode produzir. 
+Neste projeto inclui: 
+   - Labels numéricas: `LABEL`
+   - Literais inteiros e reais: `INT, NREAL`
+   - Booleanos: `BOOL`
+   - Strings: `STRING`
+   - Identificadores de variáveis: `VAR`
+   - Operadores aritméticos, relacionais e lógicos: `OPADDSUB, OPDIV, POWER, CONCAT, LT, GT, LE, GE, EQ, NE, AND, OR, NOT`
+   - Operador de atribuição: `EQUALS`
+   - Linhas de continuação: `CONTINUATION`
+   - Literais de caracteres únicos: `(`, `)`, `,`, `*`, `'`
 
-```
-PROGRAM, END, IF, THEN, ELSE, ENDIF, DO, GOTO,
-PRINT, READ, INTEGER, REAL, LOGICAL, CHARACTER,
-FUNCTION, SUBROUTINE, CALL, RETURN, PARAMETER,
-STOP, MOD, WRITE
-```
+Espaços e tabulações são ignorados.
 
-Além das palavras reservadas, o lexer reconhece identificadores, números inteiros, números reais, valores lógicos, strings, operadores aritméticos, operadores relacionais e operadores lógicos. No código, os tokens incluem, por exemplo, `LABEL`, `INT`, `NREAL`, `BOOL`, `LT`, `GT`, `LE`, `GE`, `EQ`, `NE`, `VAR`, `DOUBLE`, `AND`, `OR`, `NOT`, `STRING`, `POWER` e `CONCAT`.
+As palavras reservadas são um subconjunto dos tokens que, como o nome indica, têm um significado fixo na linguagem que não pode ser usado para outros fins, como nomear variáveis. Estas palavras incluem:
+   - Instruções de controlo de fluxo: `IF, THEN, ELSE, ENDIF, DO, GOTO, CONTINUE, RETURN, STOP`
+   - Declarações de unidades de programa: `PROGRAM, END, FUNCTION, SUBROUTINE, CALL`
+   - Declaração de Atributos ou Constantes: `INTEGER, REAL, LOGICAL, CHARACTER, PARAMETER`
+   - Instruções de entrada/saída: `PRINT, READ, WRITE`
+   - Funções Intrínsecas: `MOD`
 
-### 3.1. Suporte ao formato fixo de Fortran 77 ----------- VER ISTO
+Quando o lexer lê  um identificador, verifica se pertence ao conjunto de palavras reservadas e, caso detete que pertence, promove o seu tipo para o token correspondente.
 
-Foi tomada a decisão de considerar parcialmente o formato de colunas fixas do Fortran 77. Em particular, os labels são reconhecidos quando aparecem nas primeiras colunas da linha, com um máximo de cinco dígitos. No lexer, quando é encontrado um número, é verificada a sua posição na linha para decidir se deve ser classificado como `LABEL` ou como `INT`.
-
-Também são ignoradas linhas de comentário iniciadas por `C`, `c` ou `*` na primeira coluna, de acordo com a sintaxe tradicional do Fortran 77.
-
-### 3.2. Tipos de Literais reconhecidos
-
-O compilador reconhece:
-
-```text
-Inteiros          → 10, 123, 999
-Reais             → 1.5, .89, 1.2E-3, 3.14D0
-Lógicos           → .TRUE., .FALSE.
-Strings           → 'Ola, Mundo!'
-Caracteres        → 'A'
-```
-
-Os números reais em notação científica com `D`, comuns em Fortran para dupla precisão, são convertidos para a notação `E` antes de serem transformados em `float`.
+Se algum token não for reconhecido, é lançada um ```LexError``` com a linha em que ocorreu.
 
 ---
 
 ## 4. Análise Sintática e Gramática
 
-A análise sintática foi implementada no ficheiro `parser.py`, usando `ply.yacc`. Esta fase valida se a sequência de tokens segue a gramática definida para o subconjunto de Fortran 77 suportado pelo compilador.
+A análise sintática é a segunda fase do processo de compilação, responsável por verificar se a sequência de tokens produzida pelo analisador léxico está organizada de acordo com as regras gramaticais da linguagem. Neste projeto, o analisador sintático foi implementado em Python com recurso à biblioteca **PLY (Python Lex-Yacc)**, que gera um parser LALR(1) a partir das regras de produção definidas.
 
-O parser constrói uma **AST** através de tuplos Python, estando apresentados abaixo alguns:
 
-```python
-('DECLARE', tipo)
-('PROGRAM', nome, corpo)
-('ASSIGN', variavel, expressao)
-('IF', condicao, then_body, else_body)
-('DO', label, variavel, inicio, fim, passo)
-('PRINT', formato, argumentos)
-('READ', formato, argumentos)
-('CALL', nome, argumentos)
+### 4.1. Declarações e Tipos
+
+O ponto de arranque é o `ProgramUnitList`, que representa o ficheiro Fortran composto por uma ou mais unidades de programa, onde cada uma pode ser um `PROGRAM`, uma `FUNCTION` ou uma `SUBROUTINE`. Cada unidade começa com um cabeçalho que cria um novo âmbito na tabela de símbolos, contém uma lista de instruções e termina com `END`.
+
+```
+ProgramUnitList : ProgramUnit | ProgramUnitList ProgramUnit
+ProgramUnit     : Program | FunctionDeclaration | SubroutineDeclaration
+Program         : ProgramHeader StatementList END
+ProgramHeader   : PROGRAM VAR
 ```
 
-A gramática principal aceita uma lista de unidades de programa, onde cada unidade pode ser um `PROGRAM`, uma `FUNCTION` ou uma `SUBROUTINE`. Isto permite processar programas que contém um programa principal seguido de uma função auxiliar.
+São suportados os tipos `INTEGER`, `REAL`, `LOGICAL` e `CHARACTER` para declaração de variáveis, que podem ser simples ou arrays unidimensionais com declaração de tamanho. Para além disso, também é suportado declaração de constantes através da palavra reservada `PARAMETER`, sendo o seu valor obrigatoriamente uma expressão verificável em tempo de compilação.
 
-### 4.1. Declarações
 
-As declarações suportadas incluem tipos simples e arrays:
+### 4.2. Hierarquia de Expressões 
+As expressões seguem uma hierarquia, representada na tabela abaixo, onde categorias com nível mais alto têm precedência sob as de níveis mais baixos:
 
-```fortran
-INTEGER N, I, FAT
-REAL X
-LOGICAL FLAG
-CHARACTER TEXTO
-CHARACTER*10 NOME
-INTEGER NUMS(5)
+| Nível | Categoria             | Operadores                          |
+|-------|-----------------------|-------------------------------------|
+| 1     | Lógico                | `.OR.`                              |
+| 2     | Lógico                | `.AND.`                             |
+| 3     | Negação lógica        | `.NOT.`                             |
+| 4     | Relacional            | `.LT.` `.GT.` `.LE.` `.GE.` `.EQ.` `.NE.` |
+| 5     | Aditivo               | `+`, `-`                            |
+| 6     | Multiplicativo        | `*`, `/`, `MOD(...)`                |
+| 7     | Potência              | `**`                                |
+| 8     | Concatenação          | `//`                                |
+| 9     | Átomo                 | variáveis, literais, chamadas       |
+
+Esta hierarquia é a responsável por garantir, entre outras, que somas não são efetuadas antes de multiplicações na mesma expressão e está expressa na gramática através de não-terminais encadeados. Assim não há a necessidade de declarações explícitas de precedência:
+
+```
+Expression          : LogicalTerm | Expression OR LogicalTerm
+LogicalTerm         : LogicalFactor | LogicalTerm AND LogicalFactor
+LogicalFactor       : NOT LogicalFactor | NonLogicalExpression
+NonLogicalExpression: AdditiveExpression | AdditiveExpression RelationalOp AdditiveExpression
+AdditiveExpression  : Term | AdditiveExpression OPADDSUB Term
+Term                : PowerExpression | Term OPDIV PowerExpression
+                    | Term "*" PowerExpression | MOD "(" Term "," PowerExpression ")"
+PowerExpression     : ConcatenationExpression | PowerExpression POWER ConcatenationExpression
+ConcatenationExpression : ExpressionElement | ConcatenationExpression CONCAT ExpressionElement
+ExpressionElement   : VAR | IndexOrCall | INT | NREAL | BOOL | STRING | "(" Expression ")"
 ```
 
-No parser, a regra `Declaration : Type VarList` processa declarações de variáveis simples e arrays, registando-as na tabela de símbolos com o respetivo tipo, tamanho e, no caso de `CHARACTER`, comprimento declarado.
+É importante notar que o `IndexOrCall` é ambíguo a nível sintático já que tanto o acesso a arrays como a chamada de funções partilham a sintaxe `VAR(args)`. Assim, a sua distinção é feita na fase de análise semântica, onde a tabela de símbolos determina se o identificador corresponde a um array ou a uma função.
 
-### 4.2. Expressões
 
-O parser define uma hierarquia de expressões para suportar operadores lógicos, relacionais, aritméticos, potência e concatenação. A precedência implementada é:
+### 4.3. Construção da Árvore de Sintaxe Abstrata (AST)
+À medida que as regras são validadas, o parser constrói nós em formato de tuplos, gerando uma árvores que representa o programa de forma estruturada. Para uma melhor explicação, foi gerado o exemplo abaixo:
 
-```text
-1. Operadores lógicos: .OR., .AND., .NOT.
-2. Operadores relacionais: .LT., .GT., .LE., .GE., .EQ., .NE.
-3. Soma e subtração: +, -
-4. Multiplicação, divisão e MOD
-5. Potência: **
-6. Concatenação: //
+O código 
 ```
-
-Esta estrutura permite reconhecer expressões como:
-
-```fortran
-I .LE. NUM/2 .AND. ISPRIM
-VAL = VAL + (REM * POT)
-TEXTO = 'OLA' // ' MUNDO'
+IF (A .LT. B) THEN
+          X = 10
+      ELSE
+          X = 20
+      ENDIF 
 ```
-
-No parser, as expressões são transformadas em nós da AST como `('ADD', left, right)`, `('AND', left, right)`, `('LT', left, right)` ou `('CONCAT', left, right)`.
-
-### 4.3. Controlo de fluxo
-
-Foram implementadas regras para:
-
-```fortran
-IF condição THEN
-   ...
-ELSE
-   ...
-ENDIF
+gera a seguinte AST:
 ```
-
-```fortran
-DO 10 I = 1, N
-   ...
-10 CONTINUE
+(
+    'IF', 
+    ('LT', 'A', 'B'),           
+    [('ASSIGN', 'X', 10)],      
+    [('ASSIGN', 'X', 20)]       
+)
 ```
-
-```fortran
-GOTO 20
-```
-
-No caso do `IF`, o parser verifica semanticamente se a condição é do tipo `LOGICAL`. Se a expressão usada como condição não for lógica, é lançado um erro semântico.
-
-No caso do `DO`, são guardados o label de destino, a variável de controlo, o valor inicial, o valor final e o passo. Quando o passo não é indicado, é assumido o valor `1`, tal como é comum em Fortran.
-
-### 4.4. Entrada e saída
-
-Foram implementadas instruções de entrada e saída:
-
-```fortran
-PRINT *, 'Ola, Mundo!'
-PRINT *, 'BASE ', BASE, ': ', RESULT
-READ *, N
-WRITE (*,*) 'Texto'
-```
-
-O `PRINT` aceita um formato e uma lista opcional de argumentos. Quando não existem argumentos, é interpretado como impressão de uma linha vazia. O `READ` recebe uma lista de variáveis ou posições de array onde os valores lidos serão armazenados.
-
-O `WRITE` também foi adicionado ao parser com suporte a um par de controlo, como `WRITE(*,*)`, embora o comportamento no tradutor tenha sido aproximado ao de `PRINT`.
 
 ---
 
@@ -315,75 +288,6 @@ Assim, o translator recebe a estrutura do programa já validada e produz o códi
 
 ---
 
-## 7. Gramática Implementada
-
-Nesta secção do relatório é apresentada uma versão resumida da gramática implementada, focando as regras principais do parser.
-
-```text
-ProgramUnitList → ProgramUnitList ProgramUnit
-                | ProgramUnit
-
-ProgramUnit → Program
-            | FunctionDeclaration
-            | SubroutineDeclaration
-
-Program → PROGRAM VAR StatementList END
-
-StatementList → Statement
-              | StatementList Statement
-
-Statement → StatementContent
-          | LABEL StatementContent
-
-StatementContent → Declaration
-                 | Assignment
-                 | IfStatement
-                 | DoStatement
-                 | GotoStatement
-                 | PrintStatement
-                 | ReadStatement
-                 | WriteStatement
-                 | ParameterStatement
-                 | Continue
-                 | StopStatement
-                 | CallStatement
-                 | ReturnStatement
-
-Declaration → Type VarList
-
-Type → INTEGER
-     | REAL
-     | LOGICAL
-     | DOUBLE
-     | CHARACTER
-     | CHARACTER * INT
-
-Assignment → VAR = Expression
-
-IfStatement → IF Expression THEN StatementList ENDIF
-            | IF Expression THEN StatementList ELSE StatementList ENDIF
-            | IF Expression StatementContent
-
-DoStatement → DO INT VAR = Expression , Expression
-            | DO INT VAR = Expression , Expression , Expression
-
-GotoStatement → GOTO INT
-
-PrintStatement → PRINT Format , ArgList
-               | PRINT Format
-
-ReadStatement → READ Format , ReadArgList
-
-FunctionDeclaration → Type FUNCTION VAR ( FormalParams ) StatementList END
-
-SubroutineDeclaration → SUBROUTINE VAR StatementList END
-                      | SUBROUTINE VAR ( FormalParams ) StatementList END
-```
-
-A gramática produz uma AST simples baseada em tuplos Python, o que simplifica a passagem para a fase de tradução.
-
----
-
 ## 7. Testes Realizados
 
 Os testes foram baseados nos exemplos sugeridos no enunciado, nomeadamente:
@@ -416,6 +320,76 @@ A implementação de arrays também trouxe dificultades sobretudo devido à dife
 Também existiram limitações nas instruções de entrada e saída, como o PRINT, READ e WRITE. O PRINT e o READ foram implementados de forma funcional mas ainda com limitações, especialmente no suporte a formatos mais complexos. Já o WRITE não foi implementado, uma vez que a sua sintaxe causava conflitos shift/reduce no parser. Para resolver este conflito, seria preciso realizar alterações significativas na gramática e em várias partes do projeto. Po isso, optou-se por limitar o compilador nesse sentido e focar na implementação de outras funcionalidades e otimizações igualmente importantes.
 
 Assim, apesar do compilador já conseguir traduzir vários programas simples em Fortran77 para código máquina EWVM, ainda existem algumas limitações. No entanto, consideramos que foram superadas várias dificuldades ao longo da realização do projeto, o que nos permitiu compreender melhor o funcionamento de um compilador e a sintaxe de uma linguagem que não conhecíamos.
+
+---
+
+## 9. Otimizações Implementadas
+
+Para além de garantir a correta tradução e integridade semântica do código Fortran 77, o compilador inclui otimizações diretamente no `Translator`. O objetivo principal destas transformações é melhorar a eficiência do código gerado para a Máquina Virtual, reduzindo o número de instruções a executar, poupando espaço na memória e eliminando redundâncias computacionais.
+
+
+### 9.1. Constant Folding
+A constant folding é uma técnica que avalia operações aritméticas ou lógicas entre valores constantes diretamente em tempo de compilação, em vez de gerar código para que a máquina virtual faça esses cálculos em tempo de execução. Durante a tradução do código, são encontradas expressões cujos operandos são literais conhecidos (como números inteiros ou reais), ele calcula o resultado imediatamente e substitui todo o nó da operação por um único nó. Por exemplo:
+
+Para o código 
+```
+      X = 3 + 5 * 2
+``` 
+
+Seriam gerados os seguintes comandos:
+
+`PUSHI 3` -> `PUSHI 5` -> `PUSHI 2` -> `MUL` -> `ADD` -> `STOREG 0`
+
+Com a otimização, o `Translator` faz os cálculos e seria apenas gerado:
+
+`PUSHI 13` -> `STOREG 0`
+
+### 9.2. Eliminação de Código Morto
+A otimização de código morto é implementada no `Translator` em estruturas condicionais IF e foca-se em limpar o programa de quaisquer blocos de instruções que nunca serão alcançados pela execução. 
+
+Se o tradutor determinar que a condição de um IF é estritamente falsa, todo o bloco de instruções principal (THEN) é sumariamente ignorado e descartado do ficheiro final, gerando apenas código relativo ao ELSE. Por exemplo:
+
+Para o código
+```
+      IF (.FALSE.) THEN
+          X = 10
+      ELSE
+          X = 20
+      ENDIF
+```
+é apenas gerado 
+`PUSHI 20` -> `STOREG 0`
+
+### 9.3. Remoção de Ciclos Mortos
+A remoção de ciclos mortos deteta loops DO que nunca chegam a realizar uma única iteração. Ao analisar as instruções de um ciclo, o tradutor compara o limite inicial com o limite final fornecido e tem em consideração a direção do step.
+
+Se for detetado um ciclo onde o valor inicial já ultrapassou o objetivo logo à partida (como no exemplo abaixo), o `Translator` reconhece que é código que nunca será executado e, em vez de gastar memória a criar variáveis de iteração na stack e a gerar etiquetas de ciclo, ignora completamente o nó e passa à instrução seguinte.
+
+Para o código
+```
+      DO 10 I = 10, 1, 1
+          X = X + I
+10    CONTINUE
+```
+não é gerado nenhum comando para este ciclo, já que 10 é maior que 1 e é um ciclo com um incremento positivo.
+
+
+### 9.4. Eliminação de Dupla Negação
+
+A eliminação de dupla negação atua especificamente sobre expressões lógicas e booleanas que possuam inversões consecutivas. 
+
+Ao intersetar este padrão lógico durante a tradução, o `Translator` anula ambas as operações. Na máquina virtual, isto traduz-se diretamente na remoção de instruções repetidas `NOT`, otimizando o fluxo lógico que decide os desvios no programa. Por exemplo:
+
+Para o código
+```
+      IF (.NOT. (.NOT. FLAG)) THEN
+```
+Sem otimizações, seria gerado:
+`PUSHG 0` -> `NOT` -> `NOT` -> `JZ label_else`
+
+Com a otimização:
+`PUSHG 0` -> `JZ label_else`
+
 
 ---
 
