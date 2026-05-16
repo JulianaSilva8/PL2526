@@ -26,7 +26,11 @@
 6. [Tradução para Código EWVM](#6-tradução-para-código-ewvm)
 7. [Testes Realizados](#8-testes-realizados)                                                 // SORAIA
 8. [Dificuldades Encontradas e Limitações Atuais](#8-dificuldades-encontradas-e-limitações-atuais)
-9. [Otimizações implementadas](#9-otimizações-implementadas)                                    // SOFIA
+9. [Otimizações implementadas](#9-otimizações-implementadas)
+   - [9.1. Constant Folding](#91-constant-folding)
+   - [9.2. Eliminação de Código Morto](#92-eliminação-de-código-morto)
+   - [9.3. Remoção de Ciclos Mortos](#93-remoção-de-ciclos-mortos)
+   - [9.4. Eliminação de Dupla Negação](#94-eliminação-de-dupla-negação)
 10. [Instruções de Execução](#11-instruções-de-execução)
 11. [Conclusão](#12-conclusão)
 
