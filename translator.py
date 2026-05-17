@@ -569,7 +569,6 @@ class Translator:
     
     def gen_continue(self, node):
         """Fecha um DO pendente: incrementa a variável, testa e coloca a label de fim."""
-        print("aaaaaaaaaaaaaaaaaaaaaaaaa")
         code = []
         target_label = None
 
