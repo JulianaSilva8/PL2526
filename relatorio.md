@@ -49,7 +49,7 @@ A implementação foi organizada em vários ficheiros, cada um associado a uma f
 └── output/           # Código máquina gerado para a EWVM
 ```
 
-O ficheiro `errors.py` define exceções próprias, como `ParseError`, `SemanticError` e `SemanticWarning`, permitindo separar erros sintáticos, semânticos e avisos de análise.
+O ficheiro `errors.py` define exceções próprias, como `LexError`, `ParseError` e `SemanticError`, permitindo detetar separadamente erros em cada fase do processo.
 
 A separação em módulos torna o projeto mais organizado: o `lexer.py` identifica os tokens, o `parser.py` valida a gramática e constrói a AST, o `symbol_table.py` gere identificadores, tipos, escopos e validações semânticas, e o `translator.py` transforma a AST em instruções da EWVM.
 
