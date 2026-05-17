@@ -1,0 +1,43 @@
+PUSHI 0
+PUSHI 0
+PUSHI 0
+STOREG 1
+PUSHI 1
+STOREG 0
+DO101START:
+PUSHG 0
+PUSHI 5
+INFEQ
+JZ DO101END
+PUSHG 1
+PUSHG 0
+ADD
+STOREG 1
+TESTDL10:
+PUSHG 0
+PUSHI 1
+ADD
+STOREG 0
+JUMP DO101START
+DO101END:
+PUSHS "SOMA apos ciclo normal (esperado 15): "
+WRITES
+PUSHG 1
+WRITEI
+WRITELN
+// Otimização: Loop 20 removido (Dead Loop)
+PUSHS "SOMA apos ciclo morto (esperado 15): "
+WRITES
+PUSHG 1
+WRITEI
+WRITELN
+// Otimização: Loop 30 removido (Dead Loop)
+PUSHS "SOMA final (esperado 15): "
+WRITES
+PUSHG 1
+WRITEI
+WRITELN
+STOP
+STOP
+
+

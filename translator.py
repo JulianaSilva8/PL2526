@@ -4,24 +4,24 @@ from utils import *
 
 class Translator:
     def __init__(self, symbol_table):
+        """Inicializa o tradutor e o estado necessário para gerar código."""
         self.symbol_table = symbol_table        
         self.label_count = 0
-        # self.functions_code = {} # para armazenar o código de cada função/subrotina
         self.current_scope = None # None - escopo global, ou nome da função/subrotina atual
         self.variables = {}
         self.next_addr = 0
         self.pending_do = {} # para armazenar informações de loops DO pendentes (variável, limite inferior, limite superior, passo)
-
         self.code_to_add = "" # funções auxiliares a ser added no final do código
 
     def get_push_instruction(self):
-        """Dependendo do tipo do scope atual, retorna a instrução de push correta (PUSHG para global, PUSHL para local)"""
+        """Devolve PUSHG (global) ou PUSHL (local) conforme o escopo atual."""
         if self.symbol_table.get_current_scope_type() == 'GLOBAL' or self.symbol_table.get_current_scope_type() == 'PROGRAM':
             return "PUSHG"
         else:
             return "PUSHL"
 
     def translate(self, program_units):
+        """Traduz uma lista de unidades (PROGRAM/FUNCTION/SUBROUTINE) para código."""
         code = []
         
         for p in program_units:
@@ -38,7 +38,8 @@ class Translator:
         return code, self.code_to_add # formatos diferentes, lista de lines + string com código
 
     def translate_node(self, node):
-        if isinstance(node, list):  # ← Adiciona isto
+        """Traduz um nó AST (ou lista de nós) para uma lista de instruções."""
+        if isinstance(node, list):
             code = []
             for stmt in node:
                 result = self.translate_node(stmt)
@@ -49,47 +50,57 @@ class Translator:
                         code.append(result)
             return code
         
+        # quando se está num dead loop, ignora-se os statements todos até ao final
+        dead_loop_labels = [lbl for lbl, info in self.pending_do.items() if info.get("is_dead")]
+        if dead_loop_labels:
+            current_dead_label = dead_loop_labels[0]
+            
+            # se nodo for a label de fim do dead loop, passar à frente
+            if isinstance(node, tuple) and node[0] == 'LABEL' and str(node[1]) == str(current_dead_label):
+                del self.pending_do[current_dead_label]
+                return []
+                
+            return []
+
         if not isinstance(node, tuple):
             return self.gen_literals(node)
         op = node[0]
         
-        if op == 'DECLARE':                    # SORAIA
+        if op == 'DECLARE':                    
             return self.gen_declaration(node)
         elif op == 'ASSIGN':
             return self.gen_assign(node)
-        elif op == 'IF':                         #  SOFIA
+        elif op == 'IF':                         
             return self.gen_if(node)
         elif op == 'DO':
             return self.gen_do(node)
         elif op == 'GOTO':
             return self.gen_goto(node)
-        elif op == 'LABEL':                      # SORAIA
+        elif op == 'LABEL':                      
             return self.gen_label(node)
-        elif op == 'CALL':                       #   SOFIA
+        elif op == 'CALL':                       
             return self.gen_call(node)
         elif op == 'READ':
             return self.gen_read(node)
-        elif op == 'STOP':                       # SORAIA
+        elif op == 'STOP':                       
             return self.gen_stop(node)
-        elif op == 'WRITE':                       #  SOFIA
-            return self.gen_write(node)
         elif op == 'CONTINUE':
             return self.gen_continue(node)
         elif op == 'PRINT':
             return self.gen_print(node)
         elif op in ('ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'POWER'):
             return self.gen_arithmetic(node, op)
-        elif op in ('LT', 'GT', 'LE', 'GE', 'EQ', 'NE'):        #   SOFIA
+        elif op in ('LT', 'GT', 'LE', 'GE', 'EQ', 'NE'):      
             return self.gen_relational(node)
-        elif op in ('AND', 'OR'):                               #   SOFIA
+        elif op in ('AND', 'OR'):                              
             return self.gen_logical(node)
         elif op == 'NOT':
             return self.gen_not(node)
-        elif op == 'CONCAT':                                    # SORAIA
+        elif op == 'CONCAT':                              
             return self.gen_concat(node)
-        elif op == 'PARAMETER':                                 #   SOFIA
+        elif op == 'PARAMETER':                               
             return self.gen_parameter(node)
-        elif op == 'INDEX_OR_CALL':                             #   SOFIA
+        elif op == 'INDEX_OR_CALL':                         
             return self.gen_index_or_call(node)
         elif op == 'RETURN':
             return []
@@ -97,6 +108,7 @@ class Translator:
         return ["// Unhandled node: " + str(op)]
 
     def allocate_vars(self):
+        """Gera código para alocar/inicializar variáveis do escopo atual."""
         code = []
         vars = self.symbol_table.get_table(self.current_scope)
         for name, value in vars.items():
@@ -104,9 +116,7 @@ class Translator:
                 continue
             
             if value['is_array']:
-                # TO DO: ver casos em que size é uma expressao/variavel
                 if value['type'] == 'CHARACTER':
-                    
                     code.append(f'PUSHS ""')
                 else:
                     size = value['size']
@@ -122,11 +132,10 @@ class Translator:
                     code.append("PUSHS \"\"")
                 elif value['type'] == 'DOUBLE':
                     code.append("PUSHF 0.0")
-
         return code
 
-
     def gen_program(self, node):
+        """Gera o código de um PROGRAM (alocação, corpo e STOP)."""
         _, name, body = node
         self.current_scope = name
         code = []
@@ -139,6 +148,7 @@ class Translator:
         return code
     
     def gen_function(self, node):
+        """Gera o código de uma FUNCTION (parâmetros, locais, corpo e RETURN)."""
         _, type, name, params, body = node
         self.current_scope = name
 
@@ -162,7 +172,6 @@ class Translator:
             pop_count += len(alloc_code)
             code += alloc_code
 
-
         code += self.translate_node(body)
 
         if pop_count > 0:
@@ -175,6 +184,7 @@ class Translator:
         return code
     
     def gen_subroutine(self, node):
+        """Gera o código de uma SUBROUTINE (parâmetros, locais, corpo e RETURN)."""
         _, name, params, body = node
         self.current_scope = name
 
@@ -196,7 +206,6 @@ class Translator:
             code += aloc_code
 
         code += self.translate_node(body)
-
         self.symbol_table.go_to_scope(None)
 
         if pop_count > 0:
@@ -207,10 +216,11 @@ class Translator:
         return code
     
     def gen_declaration(self, node): 
-        # allocs de todas as vars declaradas são feitas no inicio da program unit
+        """Ignora DECLARE, pois as alocações são feitas no início da unidade."""
         return None
 
     def gen_literals(self, value):
+        """Gera PUSH de literais (int/float/bool/string) ou carregamento de variável."""
         code = []
         if isinstance(value, bool):
             code.append(f"PUSHI {1 if value else 0}")
@@ -229,10 +239,10 @@ class Translator:
         return code
 
     def gen_assign(self, node):
+        """Gera código para atribuições a variáveis e posições de arrays."""
         _, var, expr = node
         # Se expr for um tuplo, traduzimos primeiro a expressão
         code = []
-        # A(1) = 10
         if isinstance(var, tuple) and var[0] == 'INDEX_OR_CALL': # caso seja um acesso a array, tipo NUMS(I)
             _, var_name, indices = var
             index_expr = indices[0]
@@ -240,15 +250,14 @@ class Translator:
             # endereço array
             pos_var = self.symbol_table.get_index(var_name)
             push_inst = self.get_push_instruction()
-            code.append(f"{push_inst} {pos_var}") # Agora a pilha tem o endereço base do array
+            code.append(f"{push_inst} {pos_var}") # pilha tem o endereço base do array
 
             # offset 
             code += self.translate_node(index_expr)
             code.append("PUSHI 1")
-            code.append("SUB") #(indice em fortran começa em 1)
+            code.append("SUB") # indice em fortran começa em 1
 
             #storen ordem -> valor, offset, endereço
-            # valor (calc expr)
             code += self.translate_node(expr)
 
             code.append("STOREN") # a[n] = v
@@ -267,15 +276,11 @@ class Translator:
             
         return code
     
-            
-        
-# PRINT *, 'BASE ', BASE, ': ', RESULT
-# PRINT *, 'INTRODUZA UM NUMERO DECIMAL INTEIRO:'
-# PRINT *, 'A soma dos numeros e: ', SOMA
     def gen_print(self, node):
+        """Gera código para PRINT *, incluindo literais e expressões."""
         _, ast, args = node
         code = []
-        if not args: # PRINT * sem argumentos ->imprime lista vazia
+        if not args: # PRINT * sem argumentos -> imprime lista vazia
             code.append('PUSHS')
             code.append("WRITES")
             return code
@@ -324,11 +329,10 @@ class Translator:
                     code.append("WRITES")
                     
         code.append("WRITELN")
-
         return code
 
-
     def gen_arithmetic(self, node, instr):
+        """Gera código para operações aritméticas (inclui otimizações simples)."""
         _, left, right = node
         code = []
         is_float = False
@@ -417,16 +421,16 @@ class Translator:
         return code
     
     def gen_not(self, node):
+        """Gera código para NOT (com otimização de duplo NOT)."""
         _, expr = node
         
         # Otimização: duplo not
         if isinstance(expr, tuple) and expr[0] == 'NOT':
             print("Aplicando otimização de duplo NOT")
             return self.translate_node(expr[1])
-        
         code = []
 
-        if isinstance(expr, tuple): # 
+        if isinstance(expr, tuple):
             code.extend(self.translate_node(expr))
         elif isinstance(expr, bool):
             code.append(f"PUSHI {1 if expr else 0}")
@@ -439,10 +443,10 @@ class Translator:
 
         code.append("PUSHI 0")
         code.append("EQUAL")
-
         return code
     
-    def gen_read(self, node): # NAO PERCEBI ESTA
+    def gen_read(self, node):
+        """Gera código para READ *, suportando variáveis e acessos a arrays."""
         _, ast, args = node
         code = []
         for arg in args:
@@ -460,7 +464,7 @@ class Translator:
                 else: # CHARACTER
                     code.append(f"STOREG {idx}")
             
-            elif isinstance(arg, tuple) and arg[0] == 'INDEX_OR_CALL':  # ('INDEX_OR_CALL', 'NUMS', ['I']) | READ *, NUMS(I)
+            elif isinstance(arg, tuple) and arg[0] == 'INDEX_OR_CALL':  # 'INDEX_OR_CALL', 'NUMS', ['I'] | READ *, NUMS(I)
                 _, name, indices = arg
                 
                 if len(indices) == 1:
@@ -471,7 +475,7 @@ class Translator:
                     push_inst = self.get_push_instruction()
                     code.append(f"{push_inst} {idx}") # Colocar o endereço base do array na pilha
 
-                    # Em Fortran os arrays começam em 1, mas na heap vamos usar índice 0, entao NUMS(I) vira endereço NUMS + (I - 1).
+                    # Em Fortran os arrays começam em 1, mas na heap vamos usar índice 0, entao NUMS(I) fica endereço NUMS + (I - 1).
                     if isinstance(index_expr, tuple):
                         code.extend(self.translate_node(index_expr))
                     elif isinstance(index_expr, int):
@@ -481,12 +485,11 @@ class Translator:
                         push_inst = self.get_push_instruction()
                         code.append(f"{push_inst} {idx_index}")
                     
-                    # Converter índice Fortran 1-based para índice 0-based
+                    # Converter índice 1 para índice 0
                     code.append("PUSHI 1")
                     code.append("SUB")
 
-                    code.append("READ") # ler o valor
-
+                    code.append("READ")
                     if array_type in ("INTEGER", "LOGICAL"):
                         code.append("ATOI")
                     elif array_type in ("REAL", "DOUBLE"):
@@ -495,28 +498,30 @@ class Translator:
                     code.append("STOREN") # armazenar na heap. array[index] = valor
         return code
 
-    def gen_do(self, node): # NAO PERCEBI BEM ESTA
+    def gen_do(self, node):
+        """Gera o início de um DO e guarda informação para fechar o loop."""
         _, target_label, var, start, end, step = node
         
         # Otimização
         if isinstance(start, (int, float)) and isinstance(end, (int, float)) and isinstance(step, (int, float)):
-            if step > 0 and start > end:
-                print("Otimização: loop DO não executa")
-                return [] # loop nunca executa
-            if step < 0 and start < end:
-                print("Otimização: loop DO não executa")
-                return [] # loop nunca executa
+            if (step > 0 and start > end) or (step < 0 and start < end):
+                print(f"Otimização: loop DO {target_label} não executa")
+                
+                # info no pending para ignorar statements até à label de fim do loop
+                self.pending_do[target_label] = {
+                    "is_dead": True
+                }
+                return [f"// Otimização: Loop {target_label} removido (Dead Loop)"]
 
         code = []
-
+        
         # gerar labels únicos para o início e fim do loop
         self.label_count += 1
         loop_id = self.label_count
-
         start_label = f"DO{target_label}{loop_id}START"
         end_label = f"DO{target_label}{loop_id}END"
 
-        # inx da variável de controlo do loop
+        # índice da variável de controlo do loop
         var_idx = self.symbol_table.get_index(var)
 
         # inicializar a var do loop
@@ -532,8 +537,6 @@ class Translator:
             code.append(f"{push_inst} {idx}")
 
         code.append(f"STOREG {var_idx}")
-
-        # label de inicio do loop
         code.append(f"{start_label}:")
 
         # condiçao do loop
@@ -550,21 +553,23 @@ class Translator:
             push_inst = self.get_push_instruction()
             code.append(f"{push_inst} {idx}")
 
-        code.append("INFEQ") # condição de saída: var > end
+        code.append("INFEQ") # var > end
+        code.append(f"JZ {end_label}") # saltar para o fim do loop
 
-        code.append(f"JZ {end_label}") # se var > end, saltar para o fim do loop
-
-        # guardar info para fechar o loop no CONTINUE
+        # guardar info para fechar o loop
         self.pending_do[target_label] = {
             "var": var,
             "var_idx": var_idx,
             "step": step,
             "start_label": start_label,
-            "end_label": end_label
+            "end_label": end_label,
+            "is_dead": False
         }
         return code
     
     def gen_continue(self, node):
+        """Fecha um DO pendente: incrementa a variável, testa e coloca a label de fim."""
+        print("aaaaaaaaaaaaaaaaaaaaaaaaa")
         code = []
         target_label = None
 
@@ -608,14 +613,16 @@ class Translator:
         return code
 
     def gen_goto(self, node):
+        """Gera um salto incondicional para uma label no scope atual."""
         _, label = node
         scope_name = self.symbol_table.get_current_scope_name()
         return f"JUMP {scope_name}{label}"
        
     def gen_if(self, node):
+        """Gera código para IF/ELSE, com otimização para condição literal."""
         _, cond, then_body, else_body = node
         
-        # Otimização: se a condição for um valor literal, podemos calcular o resultado já aqui e evitar gerar código desnecessário
+        # Otimização
         if isinstance(cond, bool):
             if cond:
                 print("Otimização: condição IF é verdadeira, gerando apenas o corpo THEN")
@@ -660,6 +667,7 @@ class Translator:
 
     
     def gen_call(self, node):
+        """Gera código para CALL a uma subrotina, empilhando argumentos."""
         _, name, args = node
         code = []
 
@@ -684,57 +692,12 @@ class Translator:
         code.append(f"PUSHA SUBROUTINE{name}")
         code.append("CALL")
         return code
-
-    
-    def gen_write(self, node):
-        _, control_spec, args = node
-        code = []
-
-        for arg in args:
-            if isinstance(arg, bool):
-                code.append('PUSHS ".TRUE."' if arg else 'PUSHS ".FALSE."')
-                code.append("WRITES")
-            elif isinstance(arg, int):
-                code.append(f"PUSHI {arg}")
-                code.append("WRITEI")
-            elif isinstance(arg, float):
-                code.append(f"PUSHF {arg}")
-                code.append("WRITEF")
-            elif isinstance(arg, tuple):
-                code.extend(self.translate_node(arg))
-                arg_type = self.symbol_table.get_expr_type(arg)
-                if arg_type in ("REAL", "DOUBLE"):
-                    code.append("WRITEF")
-                elif arg_type == "CHARACTER":
-                    code.append("WRITES")
-                else:
-                    code.append("WRITEI")
-            elif isinstance(arg, str):
-                if arg.startswith("'") and arg.endswith("'"):
-                    literal = arg[1:-1].replace('"', '\\"')
-                    code.append(f'PUSHS "{literal}"')
-                    code.append("WRITES")
-                else:
-                    idx = self.symbol_table.get_index(arg)
-                    var_type = self.symbol_table.get_type(arg)
-                    push_inst = self.get_push_instruction()
-                    code.append(f"{push_inst} {idx}")
-                    if var_type in ("REAL", "DOUBLE"):
-                        code.append("WRITEF")
-                    elif var_type == "CHARACTER":
-                        code.append("WRITES")
-                    else:
-                        code.append("WRITEI")
-
-        code.append('PUSHS "\\n"')
-        code.append("WRITES")
-        return code
-
     
     def gen_relational(self, node):
+        """Gera código para operações relacionais (inclui otimização)."""
         op, left, right = node
         
-        # Otimização: se ambos os lados forem valores literais, podemos calcular o resultado já aqui e evitar gerar código desnecessário
+        # Otimização: se ambos os lados forem valores literais
         if isinstance(left, (int, float)) and isinstance(right, (int, float)):
             ops = {
                 'LT': left < right,
@@ -805,9 +768,10 @@ class Translator:
         return code
     
     def gen_logical(self, node):
+        """Gera código para AND/OR (inclui otimização)."""
         op, left, right = node
         
-        # Otimização: se ambos os lados forem booleanos literais, podemos calcular o resultado já aqui e evitar gerar código desnecessário
+        # Otimização: se ambos os lados forem booleanos literais
         if isinstance(left, bool) and isinstance(right, bool):
             if op == 'AND':
                 res = left and right
@@ -846,36 +810,12 @@ class Translator:
         return code
     
     def gen_parameter(self, node):
-        # _, params = node
-        # code = []
-
-        # # PARAMETER declara constantes em Fortran.
-        # # O parser já as registou na symbol table com is_parameter=True e value=valor.
-        # # Aqui geramos código para inicializar essas posições de memória em runtime,
-        # # porque a VM não tem conceito de constantes — são apenas variáveis que não mudam.
-        # for var, value in params:
-        #     idx = self.symbol_table.get_index(var)  # posição global da constante
-
-        #     if isinstance(value, bool):
-        #         code.append(f"PUSHI {1 if value else 0}")
-        #     elif isinstance(value, int):
-        #         code.append(f"PUSHI {value}")
-        #     elif isinstance(value, float):
-        #         code.append(f"PUSHF {value}")
-        #     elif isinstance(value, str):
-        #         code.append(f'PUSHS "{value}"')
-        #     elif isinstance(value, tuple):
-        #         val_code = self.translate_node(value)
-        #         if val_code:
-        #             code.extend(val_code)
-
-        #     code.append(f"STOREG {idx}")
-
-        # return "\n".join(code)
-        return "" # como as constantes já estão na symbol table, não precisamos de gerar código para elas. Se gerássemos, estariamos a sobrescrever o valor delas, o que não faz sentido.
+        """Ignora PARAMETER na geração: constantes já estão na tabela de símbolos."""
+        return "" 
 
     
     def gen_index_or_call(self, node):
+        """Gera acesso a array ou chamada de função."""
         _, name, args = node
         code = []
 
@@ -900,7 +840,7 @@ class Translator:
 
         else:
             count_args = 0
-            #alocar espaço para o retorno da função
+            # alocar espaço para o retorno da função
             code.append("PUSHI 0")
 
             for arg in args:
@@ -930,8 +870,6 @@ class Translator:
 
         return code
     
-
-
     # label, stop, concat, declare
     def gen_label(self, node):
         _, label_name, statement = node
@@ -970,75 +908,4 @@ class Translator:
         code += self.translate_node(left)
         code += self.translate_node(right)
         code.append("CONCAT")
-        return code
-    
-    def gen_write(self, node):
-        _, control_spec, args = node
-        code = []
-
-        # WRITE(*,*) sem argumentos -> linha vazia
-        if not args:
-            code.append('PUSHS "\\n"')
-            code.append("WRITES")
-            return code
-
-        for arg in args:
-            if isinstance(arg, bool):
-                if arg:
-                    code.append('PUSHS ".TRUE."')
-                else:
-                    code.append('PUSHS ".FALSE."')
-                code.append("WRITES")
-
-            elif isinstance(arg, int):
-                code.append(f"PUSHI {arg}")
-                code.append("WRITEI")
-
-            elif isinstance(arg, float):
-                code.append(f"PUSHF {arg}")
-                code.append("WRITEF")
-
-            elif isinstance(arg, str):
-                try:
-                    # Se existir na symbol table, é variável
-                    idx = self.symbol_table.get_index(arg)
-                    var_type = self.symbol_table.get_type(arg)
-
-                    push_inst = self.get_push_instruction()
-                    code.append(f"{push_inst} {idx}")
-
-                    if var_type in ("REAL", "DOUBLE"):
-                        code.append("WRITEF")
-                    elif var_type == "CHARACTER":
-                        code.append("WRITES")
-                    elif var_type == "LOGICAL":
-                        # Simples: escreve 0/1, tal como tens noutros pontos
-                        code.append("WRITEI")
-                    else:
-                        code.append("WRITEI")
-
-                except Exception:
-                    # Se não existir na symbol table, é string literal vinda do parser
-                    # Exemplo: "'IGUAL'" -> "IGUAL"
-                    if len(arg) >= 2 and arg[0] == "'" and arg[-1] == "'":
-                        arg = arg[1:-1]
-
-                    arg = arg.replace('"', '\\"')
-                    code.append(f'PUSHS "{arg}"')
-                    code.append("WRITES")
-
-            elif isinstance(arg, tuple):
-                arg_code = self.translate_node(arg)
-                if arg_code:
-                    code.extend(arg_code)
-
-                expr_type = self.symbol_table.get_expr_type(arg)
-
-                if expr_type in ("REAL", "DOUBLE"):
-                    code.append("WRITEF")
-                elif expr_type in ("CHARACTER", "STRING"):
-                    code.append("WRITES")
-                else:
-                    code.append("WRITEI")
-
         return code

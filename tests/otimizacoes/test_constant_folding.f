@@ -15,7 +15,7 @@ C     Tambem para reais
       REAL X, Y
       X = 2.5 + 1.5
       Y = 10.0 / 4.0
-      PRINT *, 'X (esperado 4.0): ', X
+      PRINT *, 'X (esperado 4): ', X
       PRINT *, 'Y (esperado 2.5): ', Y
 
 C     Expressoes relacionais entre literais

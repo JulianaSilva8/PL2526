@@ -1,19 +1,19 @@
-      PROGRAM CALC
-      REAL X, Y, DIF, QUOC
+      program calc
+      real X, Y, DIF, QUOC
       LOGICAL VALIDO
 
       PRINT *, 'INTRODUZA DOIS VALORES:'
-      READ *, X, Y
+      read *, X, Y
 
       DIF = X - Y
-      VALIDO = .FALSE.
+      VALIDO = .false.
 
       IF (Y .NE. 0.0) THEN
           QUOC = X / Y
           VALIDO = .TRUE.
-      ENDIF
+      endif
 
       PRINT *, 'DIFERENCA = ', DIF
-      PRINT *, 'DIVISAO VALIDA? ', VALIDO
+      print *, 'DIVISAO VALIDA? ', VALIDO
 
-      END
+      end

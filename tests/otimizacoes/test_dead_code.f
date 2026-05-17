@@ -1,10 +1,12 @@
-C     TESTE 2: Dead Code Elimination
+C     TESTE: Eliminacao de Codigo Morto
 C     Quando a condicao de um IF e um literal, o ramo morto nao deve
-C     gerar codigo (nem JZ/JUMP desnecessarios).
+C     gerar codigo. Para verificar: o codigo EWVM nao deve conter
+C     instrucoes para os blocos que nunca executam (ex: PUSHI 999).
       PROGRAM TESTDCE
       INTEGER X
 
-C     Ramo THEN sempre executado (condicao .TRUE.)
+C     Condicao .TRUE. literal: so o THEN deve gerar codigo
+C     O ELSE (X = 0) nao deve aparecer no ficheiro EWVM
       IF (.TRUE.) THEN
         X = 42
       ELSE
@@ -12,7 +14,8 @@ C     Ramo THEN sempre executado (condicao .TRUE.)
       ENDIF
       PRINT *, 'X (esperado 42): ', X
 
-C     Ramo ELSE nunca executado (condicao .FALSE.)
+C     Condicao .FALSE. literal: so o ELSE deve gerar codigo
+C     O THEN (X = 999) nao deve aparecer no ficheiro EWVM
       IF (.FALSE.) THEN
         X = 999
       ELSE
@@ -20,11 +23,12 @@ C     Ramo ELSE nunca executado (condicao .FALSE.)
       ENDIF
       PRINT *, 'X (esperado 7): ', X
 
-C     Sem ELSE, condicao falsa -> nada deve acontecer
+C     Condicao .FALSE. sem ELSE: o bloco inteiro deve ser ignorado
       X = 55
       IF (.FALSE.) THEN
         X = 1
       ENDIF
       PRINT *, 'X (esperado 55): ', X
 
+      STOP
       END

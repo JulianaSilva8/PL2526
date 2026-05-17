@@ -3,7 +3,7 @@ import sys
 from ply import lex, yacc
 from lexer import lexer, tokens
 from symbol_table import SymbolTable
-from errors import ParseError, SemanticError, LexError
+from errors import ParseError, SemanticError
 
 
 def p_declaration(p):
@@ -29,7 +29,7 @@ def p_declaration(p):
                 parser.symbol_table.declare(var, var_type=type_name, is_array=True, size=size) # para CHARACTER * n, declarar como array de caracteres
             else:
                 parser.symbol_table.declare(var, var_type=type_name)
-    p[0] = ('DECLARE', type_name) # ignorado na translating phase 
+    p[0] = ('DECLARE', type_name)
 
 
 def p_var_decl(p):
@@ -102,15 +102,6 @@ def p_param_assign(p):
     ParamAssign : VAR EQUALS Expression
     """
     p[0] = (p[1], p[3])
-
-# hierarquia de operadores:
-# 1. Logical: AND, OR, NOT
-# 2. Relational: LT, GT, LE, GE, EQ, NE
-# 3. Additive: OPADDSUB
-# 4. Multiplicative: OPDIV, MOD
-# 5. Power: POWER
-# 6. Concatenation: CONCAT
-
 
 def p_logical_expression(p):
     r"""
@@ -244,7 +235,7 @@ def p_if_statement(p):
         p[0] = ('IF', p[2], [p[3]], None)
 
 
-def p_for_statement(p): # não é suppsto incluir os statements dentro do DO -> isso é tratado na análise semântica
+def p_for_statement(p):
     r"""
     DoStatement : DO INT VAR EQUALS Expression "," Expression
                  | DO INT VAR EQUALS Expression "," Expression "," Expression
@@ -257,7 +248,7 @@ def p_for_statement(p): # não é suppsto incluir os statements dentro do DO -> 
     parser.symbol_table.set_value(var_name, start) # para garantir que a variável do DO é inicializada com o valor inicial antes de ser usada no corpo do DO
     start_type = parser.symbol_table.get_expr_type(start)
     end_type = parser.symbol_table.get_expr_type(end)
-    step_type = parser.symbol_table.get_expr_type(step) if step is not None else  None  # default step type is INT
+    step_type = parser.symbol_table.get_expr_type(step) if step is not None else  None  # default step tem de ser INT
     
     parser.symbol_table.register_do_label(p[2])
     parser.symbol_table.check_do_loop(var_name, start_type, end_type, step_type)
@@ -341,15 +332,12 @@ def p_subroutine_declaration(p):
                           | SubroutineHeader "(" ")" StatementList END
     """
     if len(p) == 4:
-        # SUBROUTINE VAR StatementList END
         params         = []
         statement_list = p[2]
     elif len(p) == 7:
-        # SUBROUTINE VAR "(" FormalParams ")" StatementList END
         params         = p[3]
         statement_list = p[5]
     else:
-        # SUBROUTINE VAR "(" ")" StatementList END
         params         = []
         statement_list = p[4]
  
@@ -396,7 +384,7 @@ def p_goto_statement(p):
     parser.symbol_table.register_goto_label(p[2])
     p[0] = ('GOTO', p[2])
 
-def p_stop_statement(p): # args opcionais: String of no more that 5 digits or a character constant 
+def p_stop_statement(p):
     r"""
     StopStatement : STOP
     """
@@ -421,7 +409,6 @@ def p_print_statement(p): # print sem args -> linha vazia
     PrintStatement : PRINT Format "," ArgList
                    | PRINT Format
     """
-    #parser.symbol_table.verify_format(p[2], p[4] if len(p) == 5 else []) # verificar que os argumentos são compatíveis com o formato
     for arg in (p[4] if len(p) == 5 else []):
         if isinstance(arg, str) and not (arg.startswith('\'') and arg.endswith('\'')):
             if not parser.symbol_table.is_initialized(arg):
@@ -463,8 +450,6 @@ def p_read_statement(p):
     r"""
     ReadStatement : READ Format "," ReadArgList
     """
-    # READ Format , ReadArgList
-    #parser.symbol_table.verify_format(p[2], p[4]) # verificar que os argumentos são compatíveis com o formato
     for var_name in p[4]:
         if isinstance(var_name, str):
             parser.symbol_table.initialize(var_name) # para garantir que as variáveis foram declaradas e inicializadas antes de serem lidas
@@ -472,32 +457,6 @@ def p_read_statement(p):
             array_name = var_name[1]
             parser.symbol_table.initialize(array_name) # para garantir que o array foi declarado e inicializado antes de ser lido
     p[0] = ('READ', p[2], p[4])
-
-# def p_write_statement(p):
-#     r"""
-#     WriteStatement : WRITE "(" ControlPair ")" ArgList
-#                    | WRITE "(" ControlPair ")"
-#     """
-#     control_spec = p[3]
-#     args = p[5] if len(p) == 6 else []
-
-#     p[0] = ('WRITE', control_spec, args)
-
-
-# def p_control_pair(p):
-#     r"""
-#     ControlPair : WriteUnit "," Format
-#     """
-#     p[0] = (p[1], p[3])
-
-
-# def p_write_unit(p):
-#     r"""
-#     WriteUnit : "*"
-#               | INT
-#               | VAR
-#     """
-#     p[0] = p[1]
 
 def p_format(p):
     r"""
@@ -522,7 +481,7 @@ def p_assignment_array(p):
     r"""
     Assignment : IndexOrCall EQUALS Expression
     """
-    array_name = p[1][1]  # p[1] is ('INDEX_OR_CALL', array_name, index)
+    array_name = p[1][1]  # p[1] - ('INDEX_OR_CALL', array_name, index)
     index = p[1][2]
     if len(index) != 1:
         raise SemanticError("Only one index is supported for array access.")
@@ -563,8 +522,6 @@ def p_statement(p):
     Statement : StatementContent
     """
     p[0] = p[1]
-    #           | WriteStatement  -> SEE LATER
-    # """
 
 def p_label_statement(p):
     r"""
@@ -608,21 +565,16 @@ def p_parse(p):
     else:
         p[0] = p[1] + [p[2]]
 
-# class ParseError(Exception):
-#     pass
-
-# class SemanticError(Exception):
-#     pass
-
 def p_error(t):
+    """Lança erro de parsing com token/linha (ou EOF)."""
     raise ParseError(f"Parse Error: Unexpected token: {t.type if t else '$'} (token value: {t.value}) at line {t.lineno if t else 'EOF'}")
 
-# Build parser
 parser = yacc.yacc(start="ProgramUnitList", write_tables=False)
 parser.symbol_table = SymbolTable()
 parser.quit = False
 
 def get_ast(data, lexer):
+    """Faz parse do input e valida GOTOs/DO labels/CALLs pendentes."""
     ast = parser.parse(data, lexer=lexer)
 
     parser.symbol_table.verify_pending_gotos()
@@ -630,14 +582,13 @@ def get_ast(data, lexer):
     parser.symbol_table.verify_pending_calls()
 
     return ast, parser.symbol_table
-        
 
 def main(args):
+    """Executa o parser sobre um ficheiro e imprime o AST (modo debug)."""
     with open(args[1], "r") as f:
         data = f.read()
     try:
         ast = parser.parse(data, lexer=lexer)
-
         parser.symbol_table.verify_pending_gotos()
         parser.symbol_table.verify_pending_calls()
 
@@ -647,7 +598,3 @@ def main(args):
 
 if __name__ == "__main__":
     main(sys.argv)
-
-
-# STOP str (String of no more that 5 digits or a character constant) - para o prog e mostra a str
-# VAR

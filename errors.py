@@ -1,10 +1,11 @@
 class ParseError(Exception):
-    """Parse-time errors from the parser."""
+    """Erros de análise sintática (parser)."""
     pass
 
 class SemanticError(Exception):
-    """Semantic errors raised by semantic analysis and symbol table."""
+    """Erros de análise semântica (tabela de símbolos/validações)."""
     pass
 
 class LexError(Exception):
+    """Erros de análise léxica (lexer)."""
     pass

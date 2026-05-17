@@ -23,7 +23,6 @@ reserved = {
     "LOGICAL": "LOGICAL",
     "MOD": "MOD",
     "STOP": "STOP",
-    "WRITE": "WRITE",
     "CHARACTER": "CHARACTER",
     "PARAMETER": "PARAMETER", # PARAMETER define uma constante, enquanto x = 10 define uma variável.
 }
@@ -33,7 +32,6 @@ tokens = ["LABEL", "INT", "NREAL", "BOOL", "LT", "GT", "LE", "GE", "EQ", "NE", "
 
 
 def t_COMMENT(t):
-    # capturar linhas de comentário que começam na coluna 1 com 'C' ou '*'
     r'(?m:^[cC*].*)'
     pass # ignorar os comentários, não precisamos deles para a análise sintática
 
@@ -64,7 +62,7 @@ def t_INT(t):
     return t
 
 def t_BOOL(t):
-    r"\.TRUE\.|\.FALSE\."
+    r"\.TRUE\.|\.true\.|\.FALSE\.|\.false\."
     if t.value.upper() == ".TRUE.":
         t.value = True
     else:
@@ -73,7 +71,7 @@ def t_BOOL(t):
 
 def t_CONTINUATION(t):
     r'\n[ ]{5}[^0\s]'
-    t.lexer.lineno += 1 # contar a linha de continuação como uma nova linha
+    t.lexer.lineno += 1
     pass
 
 def t_newline(t):
@@ -82,34 +80,37 @@ def t_newline(t):
 
 def t_VAR(t):
     r"[A-Za-z_][A-Za-z0-9_]*"
-    t.type = reserved.get(t.value, "VAR") 
+
+    t.value = t.value.upper()
+    t.type = reserved.get(t.value, "VAR")
+
     return t
 
 def t_STRING(t):
     r'\'[^\']*\''
-    # nao remover as aspas para depois conseguir fazer distinção de VARs na analise semântica
+    #  aspas não removidas para depois conseguir fazer distinção de VARs na analise semântica
     return t
-
 
 t_CONCAT = r"//" # operador de concatenação
 t_POWER = r"\*\*" # operador de potência
 t_OPADDSUB = r"[+\-]" # operadores de adição e subtração
 t_OPDIV = r"/" # operadores de divisão
 t_EQUALS = r"=" # operador de atribuição
-t_EQ = r'\.EQ\.'
-t_NE = r'\.NE\.'
-t_LT = r'\.LT\.'
-t_LE = r'\.LE\.'
-t_GT = r'\.GT\.'
-t_GE = r'\.GE\.'
-t_AND = r'\.AND\.'
-t_OR = r'\.OR\.'
-t_NOT = r'\.NOT\.'
+t_EQ = r'\.EQ\.|\.eq\.'
+t_NE = r'\.NE\.|\.ne\.'
+t_LT = r'\.LT\.|\.lt\.'
+t_LE = r'\.LE\.|\.le\.'
+t_GT = r'\.GT\.|\.gt\.'
+t_GE = r'\.GE\.|\.ge\.'
+t_AND = r'\.AND\.|\.and\.'
+t_OR = r'\.OR\.|\.or\.'
+t_NOT = r'\.NOT\.|\.not\.'
 t_ignore = " \t"
 
 literals = "(),*'"
 
 def check_indentation(data):
+    """Valida a indentação fixed-form: colunas 1-5 só podem conter labels."""
     lines = data.split('\n')
     for i, line in enumerate(lines):
         if not line.strip() or line[0].upper() in ['C', '*']:
@@ -126,14 +127,13 @@ def check_indentation(data):
     return data
 
 def t_error(t): 
+    """Lança erro quando encontra um carácter ilegal."""
     raise LexError(f"Illegal character '{t.value[0]}' at line {t.lexer.lineno}")
-
 
 lexer = lex.lex()
 
-
-
 def main(args):
+    """Executa o lexer sobre um ficheiro e imprime a sequência de tokens."""
     with open(args[1], "r") as f:
         data = f.read()
     try: 

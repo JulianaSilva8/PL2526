@@ -4,9 +4,10 @@ from lexer import *
 from errors import LexError, ParseError, SemanticError
 from symbol_table import SymbolTable
 import sys
+import os
 
-# main
 def main(args):
+    """Lê um ficheiro Fortran, gera AST e traduz para código de saída."""
     with open(args[1], "r") as f:
         data = f.read()
     try: 
@@ -16,7 +17,9 @@ def main(args):
         translator = Translator(symbol_table)
         code, aux = translator.translate(ast)
         
-        with open('output.txt', "w") as f:
+        filename = os.path.basename(args[1])
+        output_name = "output/" + filename + "_output"
+        with open(output_name, "w") as f:
             for line in code:
                 f.write(line + "\n")
             f.write(aux)
@@ -27,7 +30,6 @@ def main(args):
         print(f"Erro de análise sintática: {e}")
     except SemanticError as e:
         print(f"Erro de análise semântica: {e}")
-    
     
 if __name__ == "__main__":
     main(sys.argv)
