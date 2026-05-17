@@ -1,9 +1,5 @@
-C     TESTE 1: Constant Folding
-C     O compilador deve pre-calcular expressoes com literais em tempo de compilacao.
-C     Exemplo: 3 + 4 deve gerar PUSHI 7, nao PUSHI 3 / PUSHI 4 / ADD
       PROGRAM TESTCF
       INTEGER A, B, C
-C     Estas expressoes sao todas entre literais -> devem ser calculadas em compile-time
       A = 3 + 4
       B = 10 - 2
       C = A + B

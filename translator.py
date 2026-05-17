@@ -345,7 +345,7 @@ class Translator:
                 is_power_float = True
                 self.code_to_add += power_function_float + "\n"
             code.append("PUSHI 0")
-
+        
         # otimizações: fazer cálculos caso valores literais
         if isinstance(left, (int, float)) and isinstance(right, (int, float)):
             if instr == 'ADD':
@@ -511,7 +511,7 @@ class Translator:
                 self.pending_do[target_label] = {
                     "is_dead": True
                 }
-                return [f"// Otimização: Loop {target_label} removido (Dead Loop)"]
+                # return [f"// Otimização: Loop {target_label} removido (Dead Loop)"]
 
         code = []
         
