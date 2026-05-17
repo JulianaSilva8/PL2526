@@ -1,6 +1,6 @@
       PROGRAM TESTCF
       INTEGER A, B, C
-      A = 3 + 4
+      A = 3 + 4 
       B = 10 - 2
       C = A + B
       PRINT *, 'A (esperado 7): ', A
